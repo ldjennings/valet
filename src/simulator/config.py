@@ -1,0 +1,29 @@
+from enum import Enum
+
+class square(Enum):
+    EMPTY = 0
+    WALL = 1
+    HERO = 2
+    GOAL = 3
+    ENEMY = 4
+
+
+NUM_ROWS, NUM_COLS = 12, 12
+CELL_SIZE = 15
+NUM_ENEMIES = 100
+WINDOW_WIDTH  = NUM_COLS * CELL_SIZE // 2
+WINDOW_HEIGHT = NUM_ROWS * CELL_SIZE // 2
+VIRTUAL_SIZE = (800, 800)
+
+CELL_PIXEL_LEN = min(VIRTUAL_SIZE[0] // NUM_COLS, VIRTUAL_SIZE[1] // NUM_ROWS)
+
+
+
+# Colors
+BLACK   = (0,0,0)
+WHITE   = (255,255,255)
+GREEN   = (0,200,0)
+RED     = (200,0,0)
+BLUE    = (0,0,200)
+YELLOW  = (255,255,0)
+GRAY    = (150, 150, 150)

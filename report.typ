@@ -19,9 +19,9 @@ Enemies just move step by step, ignorant of anything else but the hero. I decide
 
 === Results
 
-#figure(
-  image("pygame_animation_3.gif", width: 50%)
-)
+// #figure(
+//   image("pygame_animation_3.gif", width: 50%)
+// )
 
 When playing with the program, I mainly varied the number of enemies in the simulation, also changing whether or not the hero can teleport after being caught. For low numbers of enemies (\~10), the hero was almost never caught, even without being able to teleport. At higher numbers, the hero can bounce around.
 

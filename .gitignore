@@ -2,3 +2,5 @@ __pycache__/
 venv/
 *.gif
 report.pdf
+scratch.py
+scratch.typ

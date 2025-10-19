@@ -1,0 +1,17 @@
+Metadata-Version: 2.4
+Name: Valet_Assignment
+Version: 0.1.0
+Author-email: Liam Jennings <ldjennings@wpi.edu>
+Requires-Dist: matplotlib~=3.10.6
+Requires-Dist: numpy~=2.3.3
+Requires-Dist: scipy~=1.16.2
+Requires-Dist: pygame
+Provides-Extra: test
+Requires-Dist: pytest==8.2.0; extra == "test"
+Provides-Extra: lint
+Requires-Dist: ruff==0.4.4; extra == "lint"
+Requires-Dist: mypy==1.10.0; extra == "lint"
+Provides-Extra: dev
+Requires-Dist: pytest==8.2.0; extra == "dev"
+Requires-Dist: ruff==0.4.4; extra == "dev"
+Requires-Dist: mypy==1.10.0; extra == "dev"
