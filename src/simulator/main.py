@@ -2,14 +2,21 @@ import argparse
 import numpy as np
 import matplotlib as plt
 import pygame
-from .config import *
+import config as cfg
 from .obstacle import *
+from enum import Enum
 
 def grid_to_coords(x:int, y: int):
     return (x + .5, y + .5)
 
+class square(Enum):
+    EMPTY = 0
+    WALL = 1
+    HERO = 2
+    GOAL = 3
+    ENEMY = 4
 
-def scale(points, scale = CELL_PIXEL_LEN):
+def scale(points, scale = cfg.CELL_PIXEL_LEN):
     return (np.array(points) * scale).tolist()
 
 
@@ -56,23 +63,23 @@ def draw_screen(screen: pygame.Surface, virtual_screen: pygame.Surface):
     # Preserving aspect ratio
     window_width, window_height = screen.get_size()
 
-    scale = min(window_width / VIRTUAL_SIZE[0], window_height / VIRTUAL_SIZE[1])
+    scale = min(window_width / cfg.VIRTUAL_SIZE[0], window_height / cfg.VIRTUAL_SIZE[1])
 
     # scaling the virtual surface to the actual screen size
     scaled_surface = pygame.transform.smoothscale(
         virtual_screen,
-        (int(VIRTUAL_SIZE[0] * scale), int(VIRTUAL_SIZE[1] * scale))
+        (int(cfg.VIRTUAL_SIZE[0] * scale), int(cfg.VIRTUAL_SIZE[1] * scale))
     )
     offset = (
         (window_width - scaled_surface.get_width()) // 2,
         (window_height - scaled_surface.get_height()) // 2
     )
-    screen.fill(BLACK)  # black bars
+    screen.fill(cfg.BLACK)  # black bars
     screen.blit(scaled_surface, offset)
 
 def draw_grid(screen: pygame.Surface, grid: np.ndarray):
 
-    screen.fill(BLACK)
+    screen.fill(cfg.BLACK)
     
     for r in range(grid.shape[0]):
         for c in range(grid.shape[1]):
@@ -80,25 +87,25 @@ def draw_grid(screen: pygame.Surface, grid: np.ndarray):
             rect = pygame.Rect(*rect_points)
             val = grid[r, c]
             if val == square.EMPTY.value: # nothing
-                color = WHITE
+                color = cfg.WHITE
 
             elif val == square.WALL.value:  # wall
-                color = BLACK
+                color = cfg.BLACK
 
             elif val == square.HERO.value: # player
-                color = GREEN
+                color = cfg.GREEN
 
             elif val == square.GOAL.value: # goal
-                color = YELLOW
+                color = cfg.YELLOW
             
             elif val == square.ENEMY.value: # enemy bots
-                color = RED
+                color = cfg.RED
 
             else:
-                color = BLUE # should not be called
+                color = cfg.BLUE # should not be called
 
             pygame.draw.rect(screen, color, rect) 
-            pygame.draw.rect(screen, GRAY, rect, 1) # grid lines
+            pygame.draw.rect(screen, cfg.GRAY, rect, 1) # grid lines
 
 
 def setup_sim(grid: np.ndarray,robot_length: int):
@@ -139,7 +146,7 @@ class Robot:
         rect = rotated_rect_points(pixel_state[0], pixel_state[1], scale(.57), scale(.7) , state[2])
         print(rect)
 
-        pygame.draw.polygon(screen, RED, rect.tolist())
+        pygame.draw.polygon(screen, cfg.RED, rect.tolist())
 
 
 
@@ -161,13 +168,13 @@ def main() -> None:
 
     pygame.init()
 
-    virtual_screen = pygame.Surface(VIRTUAL_SIZE)
-    screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.RESIZABLE)
+    virtual_screen = pygame.Surface(cfg.VIRTUAL_SIZE)
+    screen = pygame.display.set_mode((cfg.WINDOW_WIDTH, cfg.WINDOW_HEIGHT), pygame.RESIZABLE)
     clock = pygame.time.Clock()
 
     pygame.display.set_caption("Planner Sim")
 
-    current_grid = populate_grid((NUM_ROWS, NUM_COLS), .2)
+    current_grid = populate_grid((cfg.NUM_ROWS, cfg.NUM_COLS), .2)
     setup_sim(current_grid, 2)
     # draw_grid(virtual_screen, current_grid)
 
@@ -183,8 +190,8 @@ def main() -> None:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-        virtual_screen.fill(BLACK)
-        screen.fill(BLACK)
+        virtual_screen.fill(cfg.BLACK)
+        screen.fill(cfg.BLACK)
 
         state[2] += 2
         draw_grid(virtual_screen, current_grid)

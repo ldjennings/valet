@@ -1,11 +1,5 @@
-from enum import Enum
 
-class square(Enum):
-    EMPTY = 0
-    WALL = 1
-    HERO = 2
-    GOAL = 3
-    ENEMY = 4
+
 
 
 NUM_ROWS, NUM_COLS = 12, 12
