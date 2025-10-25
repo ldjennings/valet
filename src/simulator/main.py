@@ -2,61 +2,82 @@ import argparse
 import numpy as np
 import matplotlib as plt
 import pygame
-import config as cfg
-from .obstacle import *
-from enum import Enum
-
-def grid_to_coords(x:int, y: int):
-    return (x + .5, y + .5)
-
-class square(Enum):
-    EMPTY = 0
-    WALL = 1
-    HERO = 2
-    GOAL = 3
-    ENEMY = 4
-
-def scale(points, scale = cfg.CELL_PIXEL_LEN):
-    return (np.array(points) * scale).tolist()
+import simulator.config as cfg
+from .obstacle import ObstacleEnvironment, scale, draw_shape
+from shapely.affinity import rotate, translate
+from shapely import Polygon, MultiPolygon
+from shapely.geometry import box
 
 
-def rotated_rect_points(x, y, w, h, angle_deg, origin=None):
-    """
-    Returns the 4 corner points of a rectangle rotated by angle_deg around origin.
-    Uses NumPy for vectorized rotation.
 
-    Args:
-        x, y: rectangle center
-        w, h: width and height
-        angle_deg: rotation angle in degrees
-        origin: rotation origin (defaults to rectangle center)
-    """
-    if origin is None:
-        # origin = np.array([x + w / 2, y + h / 2])
-        origin = np.array([x,y])
 
-    hw, hh = w / 2, h / 2
 
-    # corners in clockwise order
-    corners = np.array([
-        [x - hw, y - hh],  # top-left
-        [x + hw, y - hh],  # top-right
-        [x + hw, y + hh],  # bottom-right
-        [x - hw, y + hh],  # bottom-left
-    ], dtype=float)
+def grid_to_coords(x_cell, y_cell, center=True):
+    if center:
+        x_cell +=.5
+        y_cell +=.5
+    
+    return scale((x_cell, y_cell), cfg.CELLS_TO_METERS)
 
-    # translate corners relative to origin
-    rel_corners = corners - origin
 
-    # rotation matrix
-    theta = np.radians(angle_deg)
-    c, s = np.cos(theta), np.sin(theta)
-    R = np.array([[c, -s],
-                  [s,  c]])
+def make_rect(center: tuple[float, float], w: float, h:float, angle: float = 0) -> Polygon:
+    cx, cy = center
+    initial = box(-w/2, -h/2, w/2, h/2)
+    rot = rotate(initial, angle)
+    positioned = translate(rot, cx, cy)
 
-    # rotate and translate back
-    rotated = rel_corners @ R.T + origin
-    return rotated
+    return positioned
+
+
+# def draw_polygon(surface: pygame.Surface, polygon: Polygon, color, width=0):
+#     # Convert Shapely coordinates (x, y) into a list of tuples
+#     points = [(x, y) for x, y in polygon.exterior.coords]
+#     points = scale(points)
+#     # print(f"calling draw polygon with the following points: {points}")
+#     pygame.draw.polygon(surface, color, points, width)
+
+
+
+
+
+
+# def rotated_rect_points(x, y, w, h, angle_deg, origin=None):
+#     """
+#     Returns the 4 corner points of a rectangle rotated by angle_deg around origin.
+#     Uses NumPy for vectorized rotation.
+
+#     Args:
+#         x, y: rectangle center
+#         w, h: width and height
+#         angle_deg: rotation angle in degrees
+#         origin: rotation origin (defaults to rectangle center)
+#     """
+#     if origin is None:
+#         # origin = np.array([x + w / 2, y + h / 2])
+#         origin = np.array([x,y])
+
+#     hw, hh = w / 2, h / 2
+
+#     # corners in clockwise order
+#     corners = np.array([
+#         [x - hw, y - hh],  # top-left
+#         [x + hw, y - hh],  # top-right
+#         [x + hw, y + hh],  # bottom-right
+#         [x - hw, y + hh],  # bottom-left
+#     ], dtype=float)
+
+#     # translate corners relative to origin
+#     rel_corners = corners - origin
+
+#     # rotation matrix
+#     theta = np.radians(angle_deg)
+#     c, s = np.cos(theta), np.sin(theta)
+#     R = np.array([[c, -s],
+#                   [s,  c]])
+
+#     # rotate and translate back
+#     rotated = rel_corners @ R.T + origin
+#     return rotated
 
 
 def draw_screen(screen: pygame.Surface, virtual_screen: pygame.Surface):
@@ -77,48 +98,14 @@ def draw_screen(screen: pygame.Surface, virtual_screen: pygame.Surface):
     screen.fill(cfg.BLACK)  # black bars
     screen.blit(scaled_surface, offset)
 
-def draw_grid(screen: pygame.Surface, grid: np.ndarray):
 
-    screen.fill(cfg.BLACK)
-    
-    for r in range(grid.shape[0]):
-        for c in range(grid.shape[1]):
-            rect_points =  scale([c, r, 1, 1,])
-            rect = pygame.Rect(*rect_points)
-            val = grid[r, c]
-            if val == square.EMPTY.value: # nothing
-                color = cfg.WHITE
-
-            elif val == square.WALL.value:  # wall
-                color = cfg.BLACK
-
-            elif val == square.HERO.value: # player
-                color = cfg.GREEN
-
-            elif val == square.GOAL.value: # goal
-                color = cfg.YELLOW
-            
-            elif val == square.ENEMY.value: # enemy bots
-                color = cfg.RED
-
-            else:
-                color = cfg.BLUE # should not be called
-
-            pygame.draw.rect(screen, color, rect) 
-            pygame.draw.rect(screen, cfg.GRAY, rect, 1) # grid lines
-
-
-def setup_sim(grid: np.ndarray,robot_length: int):
-    # clearing space for start position
-    grid[0:robot_length, 0:robot_length] = 0
-
-    # clearing bottom right corner
-    grid[-robot_length, -robot_length:] = 0
 
 
 
 class Robot:
-    def __init__(self, max_v=1.0, max_w=1.0):
+    goal_state = [(cfg.NUM_COLS -.5) * cfg.CELLS_TO_METERS, (cfg.NUM_ROWS-.5) * cfg.CELLS_TO_METERS, -90]
+
+    def __init__(self, max_v=1.0, max_w=1.0, ):
         self.max_v = max_v
         self.max_w = max_w
 
@@ -139,18 +126,31 @@ class Robot:
         dtheta = np.arctan2(np.sin(s2[2]-s1[2]), np.cos(s2[2]-s1[2]))
         return np.sqrt(dx**2 + dy**2) + 0.1 * abs(dtheta)
     
-    def draw(self, screen: pygame.Surface, state):
+    def draw(self, screen: pygame.Surface, state, color: tuple[int,int,int] = cfg.RED):
+        x, y, a = state
 
-        pixel_state = scale(state)
         
-        rect = rotated_rect_points(pixel_state[0], pixel_state[1], scale(.57), scale(.7) , state[2])
-        print(rect)
+        # rotate rectangle around center 
+        rect = make_rect((x, y), cfg.ROBOT_WIDTH_METERS, cfg.ROBOT_LENGTH_METERS, a)
 
-        pygame.draw.polygon(screen, cfg.RED, rect.tolist())
+        # rect = make_rect((x, y), 8, 8, a)
+        # draw robot
+        draw_shape(screen, rect, color)
+        # print(f"drawing thingy at: {rect.exterior.coords.xy}")
+        draw_shape(screen, rect, cfg.BLACK, 1)
+
+    # def has_collided(self, state, grid: ObstacleEnvironment) -> bool:
+    #     x, y, a = state
+    #     # If it is inside a cell
+    #     if grid.get_cell_val(x, y) is 1:
+    #         return True
+        
+    #     def OBB_collision(rect1, rect2) -> bool:
 
 
+        
 
-    
+    #     return True
 
 
 
@@ -169,15 +169,12 @@ def main() -> None:
     pygame.init()
 
     virtual_screen = pygame.Surface(cfg.VIRTUAL_SIZE)
-    screen = pygame.display.set_mode((cfg.WINDOW_WIDTH, cfg.WINDOW_HEIGHT), pygame.RESIZABLE)
+    screen = pygame.display.set_mode(cfg.VIRTUAL_SIZE, pygame.RESIZABLE)
     clock = pygame.time.Clock()
 
     pygame.display.set_caption("Planner Sim")
 
-    current_grid = populate_grid((cfg.NUM_ROWS, cfg.NUM_COLS), .2)
-    setup_sim(current_grid, 2)
-    # draw_grid(virtual_screen, current_grid)
-
+    environment = ObstacleEnvironment((cfg.NUM_ROWS, cfg.NUM_COLS), .2, .7)
 
     diff = Robot()
 
@@ -190,20 +187,27 @@ def main() -> None:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-        virtual_screen.fill(cfg.BLACK)
+                
+        # virtual_screen.fill(cfg.WHITE)
         screen.fill(cfg.BLACK)
 
         state[2] += 2
-        draw_grid(virtual_screen, current_grid)
+
+        environment.draw_grid(virtual_screen)
         diff.draw(virtual_screen, state)
+        diff.draw(virtual_screen, Robot.goal_state, cfg.GREEN)
         draw_screen(screen, virtual_screen)
+
+        x, y, a = state
+
+        
+        # rotate rectangle around center 
+        if make_rect((x, y), cfg.ROBOT_WIDTH_METERS, cfg.ROBOT_LENGTH_METERS, a).intersects(environment.world_geom):
+            print("collides!!!")
 
         pygame.display.flip()
         clock.tick(30)
 
-    # paths = Planner.simulate_path(diff, [0,0,0])
-    # print(f"Count: {paths}, len: {len(paths)}")
-    # print(paths)
 
 
 if __name__ == "__main__":
