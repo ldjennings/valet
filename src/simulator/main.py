@@ -3,21 +3,15 @@ import numpy as np
 import matplotlib as plt
 import pygame
 import simulator.config as cfg
-from .obstacle import ObstacleEnvironment, scale, draw_shape
+from .obstacle import ObstacleEnvironment, draw_shape, grid_to_coords
 from shapely.affinity import rotate, translate
-from shapely import Polygon, MultiPolygon
+from shapely import Polygon, Geometry
 from shapely.geometry import box
+from typing import Sequence
 
 
 
 
-
-def grid_to_coords(x_cell, y_cell, center=True):
-    if center:
-        x_cell +=.5
-        y_cell +=.5
-    
-    return scale((x_cell, y_cell), cfg.CELLS_TO_METERS)
 
 
 def make_rect(center: tuple[float, float], w: float, h:float, angle: float = 0) -> Polygon:
@@ -29,14 +23,26 @@ def make_rect(center: tuple[float, float], w: float, h:float, angle: float = 0) 
     return positioned
 
 
-# def draw_polygon(surface: pygame.Surface, polygon: Polygon, color, width=0):
-#     # Convert Shapely coordinates (x, y) into a list of tuples
-#     points = [(x, y) for x, y in polygon.exterior.coords]
-#     points = scale(points)
-#     # print(f"calling draw polygon with the following points: {points}")
-#     pygame.draw.polygon(surface, color, points, width)
 
 
+keymap = {
+    pygame.K_LEFT:  (-.5, 0, 0),
+    pygame.K_RIGHT: ( .5, 0, 0),
+    pygame.K_UP:    ( 0,-.5, 0),
+    pygame.K_DOWN:  ( 0, .5, 0),
+    pygame.K_a:     ( 0, 0,-5),
+    pygame.K_r:     ( 0, 0, 5),
+    pygame.K_w:     ( 0, 0, 0, -5),
+    pygame.K_f:     ( 0, 0, 0, 5),
+}
+
+def handle_input(state, speed=2):
+    keys = pygame.key.get_pressed()
+    for k, delta in keymap.items():
+        if keys[k]:
+            for i, d in enumerate(delta):
+                if len(state) > i:
+                    state[i] += d * speed
 
 
 
@@ -83,7 +89,6 @@ def make_rect(center: tuple[float, float], w: float, h:float, angle: float = 0) 
 def draw_screen(screen: pygame.Surface, virtual_screen: pygame.Surface):
     # Preserving aspect ratio
     window_width, window_height = screen.get_size()
-
     scale = min(window_width / cfg.VIRTUAL_SIZE[0], window_height / cfg.VIRTUAL_SIZE[1])
 
     # scaling the virtual surface to the actual screen size
@@ -91,66 +96,62 @@ def draw_screen(screen: pygame.Surface, virtual_screen: pygame.Surface):
         virtual_screen,
         (int(cfg.VIRTUAL_SIZE[0] * scale), int(cfg.VIRTUAL_SIZE[1] * scale))
     )
+    # centering the screen
     offset = (
         (window_width - scaled_surface.get_width()) // 2,
         (window_height - scaled_surface.get_height()) // 2
     )
-    screen.fill(cfg.BLACK)  # black bars
+
+    screen.fill(cfg.BLACK)
     screen.blit(scaled_surface, offset)
 
 
 
 
 
-class Robot:
-    goal_state = [(cfg.NUM_COLS -.5) * cfg.CELLS_TO_METERS, (cfg.NUM_ROWS-.5) * cfg.CELLS_TO_METERS, -90]
+DifferentialDriveState = Sequence[float]
 
-    def __init__(self, max_v=1.0, max_w=1.0, ):
-        self.max_v = max_v
-        self.max_w = max_w
+goal_state = [(cfg.NUM_COLS -.5) * cfg.CELLS_TO_METERS, (cfg.NUM_ROWS-.5) * cfg.CELLS_TO_METERS, -90]
+class DifferentialDriveModel:
+    """Defines kinematics and geometry for a differential-drive robot."""
 
-    def propagate(self, state, control, dt):
+
+    # ---- Motion model ----
+    def propagate(self, state: DifferentialDriveState, control: tuple[float, float], dt: float) -> np.ndarray:
+        """Propagate one step using Euler integration."""
+        assert len(state) >= 3, "State must have [x, y, theta]"
         x, y, theta = state
         v, w = control
+        
+        return np.array([
+            x + v * np.cos(theta) * dt,
+            y + v * np.sin(theta) * dt,
+            theta + w * dt
+        ])
 
-        # integrate using simple Euler
-        x_next = x + v * np.cos(theta) * dt
-        y_next = y + v * np.sin(theta) * dt
-        theta_next = theta + w * dt
-
-        return np.array([x_next, y_next, theta_next])
-
-    def distance(self, s1, s2):
-        # Euclidean distance in x,y + orientation difference
+    @staticmethod
+    def distance(s1: DifferentialDriveState, s2: DifferentialDriveState) -> float:
+        """Distance metric that combines xy distance and heading difference"""
         dx, dy = s2[0]-s1[0], s2[1]-s1[1]
         dtheta = np.arctan2(np.sin(s2[2]-s1[2]), np.cos(s2[2]-s1[2]))
         return np.sqrt(dx**2 + dy**2) + 0.1 * abs(dtheta)
-    
-    def draw(self, screen: pygame.Surface, state, color: tuple[int,int,int] = cfg.RED):
+
+    @staticmethod
+    def check_collision(state: DifferentialDriveState, geom: Geometry) -> bool:
+        """Check if robot geometry intersects with supplied geometry"""
         x, y, a = state
-
-        
-        # rotate rectangle around center 
         rect = make_rect((x, y), cfg.ROBOT_WIDTH_METERS, cfg.ROBOT_LENGTH_METERS, a)
+        return rect.intersects(geom)
 
-        # rect = make_rect((x, y), 8, 8, a)
-        # draw robot
+    @staticmethod
+    def draw(screen: pygame.Surface, state: DifferentialDriveState, color: tuple[int, int, int] = cfg.RED) -> None:
+        """Draws differential drive robot on screen as a rectangle"""
+        x, y, a = state
+        rect = make_rect((x, y), cfg.ROBOT_WIDTH_METERS, cfg.ROBOT_LENGTH_METERS, a)
         draw_shape(screen, rect, color)
-        # print(f"drawing thingy at: {rect.exterior.coords.xy}")
         draw_shape(screen, rect, cfg.BLACK, 1)
 
-    # def has_collided(self, state, grid: ObstacleEnvironment) -> bool:
-    #     x, y, a = state
-    #     # If it is inside a cell
-    #     if grid.get_cell_val(x, y) is 1:
-    #         return True
-        
-    #     def OBB_collision(rect1, rect2) -> bool:
 
-
-        
-
-    #     return True
 
 
 
@@ -176,10 +177,9 @@ def main() -> None:
 
     environment = ObstacleEnvironment((cfg.NUM_ROWS, cfg.NUM_COLS), .2, .7)
 
-    diff = Robot()
+    diff = DifferentialDriveModel()
 
     state = [*grid_to_coords(6,7), 0]
-
 
     
     running = True
@@ -188,22 +188,27 @@ def main() -> None:
             if event.type == pygame.QUIT:
                 running = False
                 
+        handle_input(state)
         # virtual_screen.fill(cfg.WHITE)
-        screen.fill(cfg.BLACK)
+        virtual_screen.fill(cfg.BLACK)
 
-        state[2] += 2
-
-        environment.draw_grid(virtual_screen)
-        diff.draw(virtual_screen, state)
-        diff.draw(virtual_screen, Robot.goal_state, cfg.GREEN)
-        draw_screen(screen, virtual_screen)
-
+        # state[2] += 2
         x, y, a = state
 
+        col = cfg.GREEN
+
+        # truck_geom = truck_trailer_geom(*state)
         
-        # rotate rectangle around center 
-        if make_rect((x, y), cfg.ROBOT_WIDTH_METERS, cfg.ROBOT_LENGTH_METERS, a).intersects(environment.world_geom):
-            print("collides!!!")
+        if diff.check_collision(state, environment.world_geom):
+            col = cfg.RED
+
+        environment.draw_grid(virtual_screen)
+        diff.draw(virtual_screen, state, col)
+        DifferentialDriveModel.draw(virtual_screen, goal_state, cfg.GREEN)
+
+        draw_screen(screen, virtual_screen)
+
+
 
         pygame.display.flip()
         clock.tick(30)
