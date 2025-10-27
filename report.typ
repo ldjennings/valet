@@ -15,6 +15,8 @@ To run the main simulator, now enter the command `runsim`, as an entry point was
 
 To specify the configuration to collision check, use `--work` to specify   `diff`, `car`, or `trailer`.
 
+To see what I was experimenting with for the rest of the assignment, see the scratch directory.
+
 === Approach
 
 I chose to represent the state of the world using a numpy array, with different states (empty, wall, goal, hero, enemy) represented by different integers. I chose numpy arrays to store the grid state because it allows for fast access and easy copying of the grid for updates, while also being very simple. 
@@ -78,19 +80,35 @@ def truck_trailer_geom(x, y, theta, phi):
 
 #figure(
     grid(
-        columns: 2,     // 2 means 2 auto-sized columns
-        gutter: 2mm,    // space between columns
-        image("photos/trailer_clear.png"),
-        image("photos/trailer_collision.png"),
+        columns: 2,
+        gutter: 2mm,
+        box(
+            stroke: 2pt + black,
+            radius: 5pt,
+            inset: 5pt,        
+            image("photos/trailer_clear.png"),
+        ),
+        box(
+            stroke: 2pt + black,
+            radius: 5pt,
+            inset: 5pt,
+            image("photos/trailer_collision.png"),
+        )
     ),
     caption: "Example of collision detection on trailer. The connection length has been exaggerated."
 )
 
-An example of the collision detection can be seen above with the truck and trailer. When it has collided with the obstacles in the environment, the vehicle turns red. As can be seen in the diagram, the line segment is also included in the collision check. 
+An example of the collision detection can be seen above with the truck and trailer. When it has collided with the obstacles in the environment, the vehicle turns red, but is normally green when not colliding with anything.. As can be seen in the diagram, the line segment is also included in the collision check. 
 
 === Results
 
 ==== Challenges
 
-I had a lot of difficulty with getting a state lattice set up. This mainly revolved around properly simultating the kinematics of the system and making sure that the state lattice was properly aligned throughout the process. I was able to get a very rough version working, but it failed
+I had a lot of difficulty with getting a state lattice set up. This mainly revolved around properly simultating the kinematics of the system and making sure that the state lattice was properly aligned throughout the process. I was able to get a very rough version working, but it failed to regularly tile the state space, as I was just propogating out from headings rather than actually going to regular nodes that could easily be searched using A\*. It could get within a very rough radius, but not close enough to be consistent:
 
+#figure(
+    image("photos/test_lattice.png"),
+    caption: "results from experimenting with rudimentary state latticing."
+)
+
+I also tried to get a handle on Reed-Shepp or Dubin paths, but never got far enough with those.  
