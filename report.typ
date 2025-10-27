@@ -1,11 +1,17 @@
-
-= Flatland Homework Assignment
+#show link: underline
+= Valet Homework Assignment
 == RBE 550 - Liam Jennings
 
 
 === Introduction
-For this assignment, I made a simple grid world for the 'hero' and 'enemy' robots to navigate and maneuver around each other. I chose to use python, pygame, and A-star to finish this project. 
+For this assignment, I simulated the kinematics of the robot, car, and trailer using a state lattice, and implemented a collision checker using #link("https://shapely.readthedocs.io/en/stable/")[shapely], a python library used to model and manipulate geometry.
 
+I apologize for this assignment. I worked on it when I had a fever and forgot to go to sleep.
+
+==== Usage
+Dependencies are managed through a `pyproject.toml` file. Create a virtual environment, then run `pip install .`. 
+
+To run the main simulator, now enter the command `runsim`, as an entry point was 
 
 === Approach
 
@@ -13,21 +19,76 @@ I chose to represent the state of the world using a numpy array, with different 
 
 The hero uses A\* with a Manhattan distance heuristic to decide its next move, with that being recalculated with every step taken. Using D\* would be more appropriate due to the changing environment, but I used A\* because it was simpler to implement.
 
-Enemies just move step by step, ignorant of anything else but the hero. I decided to run the program using pygame, but I think that I really should have just done matplotlib, because it would make it easier to visualize other aspects of the problem.
+For collision detection, I chose to use #link("https://shapely.readthedocs.io/en/stable/")[shapely], a third-party python library used to model and manipulate geometry.
+
+This significantly reduced the difficulty of doing collision detection, and reduced the technical debt.
+
+Rather than implementing a series of more granular checks, like checking points along the robot perimiter, then using hte separating axis theorem or similar, I only needed to define the vehicles and environment geometrically and then call the `intersects` method with the two. 
+
+As an example, the code for defining the trailer geometry can be seen below. It constructs two rectangles using the constants described in the assignment and the current state variables:
+
+```python
+def truck_trailer_geom(x, y, theta, phi):
+    """
+    Returns a Shapely geometry (truck + trailer + connection)
+    given truck rear-axle center (x, y), truck heading theta, and trailer angle phi.
+    The trailer is attached directly at the truck's rear axle.
+    """
+    # shortening the constants, 
+    TRUCK_LEN = cfg.TRUCK_LENGTH_METERS
+    TRUCK_W = cfg.TRUCK_WIDTH_METERS
+    WHEELBASE = cfg.TRUCK_WHEELBASE_METERS
+    TRAILER_LEN = cfg.TRAILER_LENGTH_METERS
+    TRAILER_W = cfg.TRAILER_WIDTH_METERS
+    D1 = cfg.TRUCK_HITCH_TO_TRAILER_AXLE * 3
+
+    # Trailer axle
+    x_t = x + D1 * math.cos(math.radians(theta + phi))
+    y_t = y + D1 * math.sin(math.radians(theta + phi))
+
+    # truck rectangle with the rear axle at 0,0
+    truck_rect = Polygon([
+        [-WHEELBASE, -TRUCK_W/2],
+        [TRUCK_LEN - WHEELBASE, -TRUCK_W/2],
+        [TRUCK_LEN - WHEELBASE,  TRUCK_W/2],
+        [-WHEELBASE,  TRUCK_W/2]
+    ])
+    truck_world = rotate(truck_rect, theta, origin=(0, 0))
+    truck_world = translate(truck_world, xoff=x, yoff=y)
+
+    # trailer rectangle
+    trailer_rect = Polygon([
+        [-TRAILER_LEN/2, -TRAILER_W/2],
+        [ TRAILER_LEN/2, -TRAILER_W/2],
+        [ TRAILER_LEN/2,  TRAILER_W/2],
+        [-TRAILER_LEN/2,  TRAILER_W/2]
+    ])
+    trailer_world = rotate(trailer_rect, theta + phi, origin=(0, 0))
+    trailer_world = translate(trailer_world, xoff=x_t, yoff=y_t)
+
+    # line between them
+    connection = LineString([(x, y), (x_t, y_t)])
+
+    return unary_union([truck_world, trailer_world, connection])
+```
 
 
+
+#figure(
+    grid(
+        columns: 2,     // 2 means 2 auto-sized columns
+        gutter: 2mm,    // space between columns
+        image("photos/trailer_clear.png"),
+        image("photos/trailer_collision.png"),
+    ),
+    caption: "Example of collision detection on trailer. The connection length has been exaggerated."
+)
+
+An example of the collision detection can be seen above with the truck and trailer. When it has collided with the obstacles in the environment, the vehicle turns red. As can be seen in the diagram, the line segment is also included in the collision check. 
 
 === Results
 
-// #figure(
-//   image("pygame_animation_3.gif", width: 50%)
-// )
+==== Challenges
 
-When playing with the program, I mainly varied the number of enemies in the simulation, also changing whether or not the hero can teleport after being caught. For low numbers of enemies (\~10), the hero was almost never caught, even without being able to teleport. At higher numbers, the hero can bounce around.
+I had a lot of difficulty with getting a state lattice set up. This mainly revolved around properly simultating the kinematics of the system and making sure that the state lattice was properly aligned throughout the process. I was able to get a very rough version working, but it failed
 
-At times, when an enemy and the hero meet head on, they will oscillate up and down continuously. This is probably a quirk with how I programmed it.
-
-
-=== Conclusions
-
-Overall, A\* works well for this kind of grid navigation. At higher numbers, the enemies add enough challenge to make it interesting, and the GIFs are helpful for seeing how the simulation plays out.

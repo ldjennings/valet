@@ -11,7 +11,10 @@ from typing import Sequence
 from simulator.trailer import truck_trailer_geom
 
 
+def wrap_to_pi(ang_rad: float):
+    """Wraps arbitrary radian angle to pi to negative pi"""
 
+    return (ang_rad + np.pi) % (2 * np.pi) - np.pi
 
 
 
@@ -76,11 +79,10 @@ goal_state = [(cfg.NUM_COLS -.5) * cfg.CELLS_TO_METERS, (cfg.NUM_ROWS-.5) * cfg.
 class DifferentialDriveModel:
     """Defines kinematics and geometry for a differential-drive robot."""
 
-
     # ---- Motion model ----
     def propagate(self, state: DifferentialDriveState, control: tuple[float, float], dt: float) -> np.ndarray:
         """Propagate one step using Euler integration."""
-        assert len(state) >= 3, "State must have [x, y, theta]"
+        assert len(state) == 3, "State should be [x, y, theta]"
         x, y, theta = state
         v, w = control
         
@@ -89,12 +91,62 @@ class DifferentialDriveModel:
             y + v * np.sin(theta) * dt,
             theta + w * dt
         ])
+    
+    @staticmethod
+    def generate_trajectory(start, goal, w:float = 1.0, v:float = 1.0, dt=0.1):
+        # make inputs nicer
+        x_start, y_start, t_start = start
+        x_goal, y_goal, t_goal = goal
+
+        t_start = wrap_to_pi(t_start)
+        t_goal = wrap_to_pi(t_goal)
+
+        traj = []
+
+        dx = x_goal - x_start
+        dy = y_goal - y_start
+        theta_to_goal = np.arctan2(dy, dx)
+        dtheta1 = wrap_to_pi(theta_to_goal - t_start)
+
+        # first turning stage
+        steps_to_rotate = max(1, int(abs(dtheta1) / (w*dt)))
+
+        for i in range(steps_to_rotate):
+            theta = t_start + dtheta1 * (i+1)/steps_to_rotate
+            traj.append((x_start, y_start, wrap_to_pi(theta)))
+
+        # drive straignt to goal
+        distance = np.hypot(dx, dy)
+        n_steps_straight = max(1, int(distance / (v*dt)))
+
+        for i in range(n_steps_straight):
+            x = x_start + dx * (i+1)/n_steps_straight
+            y = y_start + dy * (i+1)/n_steps_straight
+            traj.append((x, y, theta_to_goal))
+
+        # rotate to goal heading
+        dtheta2 = wrap_to_pi(t_goal - theta_to_goal)
+        steps_to_rotate2 = max(1, int(abs(dtheta2) / (w*dt)))
+
+        for i in range(steps_to_rotate2):
+            theta = theta_to_goal + dtheta2 * (i+1)/steps_to_rotate2
+            traj.append((x_goal, y_goal, wrap_to_pi(theta)))
+
+        return np.array(traj)
+
+
 
     @staticmethod
     def distance(s1: DifferentialDriveState, s2: DifferentialDriveState) -> float:
         """Distance metric that combines xy distance and heading difference"""
-        dx, dy = s2[0]-s1[0], s2[1]-s1[1]
-        dtheta = np.arctan2(np.sin(s2[2]-s1[2]), np.cos(s2[2]-s1[2]))
+        x1, y1, t1 = s1
+        x2, y2, t2 = s2
+
+        t1 = wrap_to_pi(t1)
+        t2 = wrap_to_pi(t2)
+
+        dx, dy = x2 - x1, y2-y1
+        dtheta = np.arctan2(np.sin(t2-t1), np.cos(t2-t1))
         return np.sqrt(dx**2 + dy**2) + 0.1 * abs(dtheta)
 
     @staticmethod
