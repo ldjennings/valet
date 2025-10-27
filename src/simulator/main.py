@@ -1,6 +1,5 @@
 import argparse
 import numpy as np
-import matplotlib as plt
 import pygame
 import simulator.config as cfg
 from simulator.obstacle import ObstacleEnvironment, draw_shape, grid_to_coords

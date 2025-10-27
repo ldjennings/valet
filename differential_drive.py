@@ -2,16 +2,18 @@ import numpy as np
 import matplotlib.pyplot as plt
 import heapq
 
-from test2 import generate_primitives
+# this is me trying to wrap my head around state lattices, probably making them way more complicated than they need to be
+
+# from test2 import generate_primitives
 
 L = 2.5  # wheelbase (m)
 v = 2.0  # constant velocity
 dt = 0.1
-T = 3.0  # seconds per primitive
+T = 3.0  # seconds per primitive (horizion)
 steering_angles = np.radians([-26.6, -17.5, 0.0, 17.5, 26.6])
 
 def wrap_to_pi(ang: float):
-    """Wraps radian angle to pi to negative pi"""
+    """Wraps radian angle from pi to negative pi"""
 
     return (ang + np.pi) % (2 * np.pi) - np.pi
 

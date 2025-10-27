@@ -11,7 +11,9 @@ I apologize for this assignment. I worked on it when I had a fever and forgot to
 ==== Usage
 Dependencies are managed through a `pyproject.toml` file. Create a virtual environment, then run `pip install .`. 
 
-To run the main simulator, now enter the command `runsim`, as an entry point was 
+To run the main simulator, now enter the command `runsim`, as an entry point was created by the config file. This is basic, as it only has the collision checking implemented, but you can maneuver and rotate it with the arrow and WASD keys respectively. 
+
+To specify the configuration to collision check, use `--work` to specify   `diff`, `car`, or `trailer`.
 
 === Approach
 
