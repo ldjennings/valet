@@ -2,7 +2,7 @@ __pycache__/
 venv/
 *.gif
 *.svg
-report.pdf
+# report.pdf
 scratch.py
 scratch.typ
 
