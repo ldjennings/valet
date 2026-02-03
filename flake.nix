@@ -11,12 +11,18 @@
       pkgs = import nixpkgs { inherit system; };
     in {
       devShells.${system}.default =
-        pkgs.buildFHSUserEnv {
+        pkgs.buildFHSEnv {
           name = "valet-dev";
 
           targetPkgs = pkgs: (with pkgs; [
             python314
             python314Packages.virtualenv
+            zsh
+            eza
+            fd
+            pkg-config
+            openssl
+
           ]);
 
           runScript = "zsh";

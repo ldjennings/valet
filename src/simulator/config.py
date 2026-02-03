@@ -1,6 +1,3 @@
-
-
-
 # screen/environment stuff
 NUM_ROWS, NUM_COLS = 12, 12
 CELL_SIZE = 15

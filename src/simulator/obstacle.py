@@ -44,12 +44,6 @@ def scale(points, scale = cfg.METERS_TO_PIXELS):
     return (np.array(points) * scale).tolist()
 
 
-class square(Enum):
-    EMPTY = 0
-    WALL = 1
-    HERO = 2
-    GOAL = 3
-    ENEMY = 4
 
 def placeRandomUnoccupied(grid: np.ndarray, val, modify:bool = True) -> tuple[int,int]:
     while True:
@@ -120,18 +114,19 @@ class ObstacleEnvironment():
     '''
     This class needs to encapsulate the environment, particularly the scaling factor between the numpy array and the actual grid.
 
-    Shouuld:
+    Should:
     - do the initial creation (randomly populating the grid, and clearing the top left and bottom right)
     - allow translation between grid indices and actual x,y coordinaes
     - have a method for drawing them
     '''
 
+
     def __init__(self, grid_shape: tuple[int, int], proportion_filled: float, robot_length: float) -> None:
         self.grid: np.ndarray = populate_grid(grid_shape, proportion_filled)
 
-        length_in_cells = int((robot_length // cfg.CELLS_TO_METERS) + 1)
+        robot_cell_length = int((robot_length // cfg.CELLS_TO_METERS) + 1)
 
-        clear_start_goal(self.grid, length_in_cells)
+        clear_start_goal(self.grid, robot_cell_length)
 
         CELL_SIZE = cfg.CELLS_TO_METERS
         polys = []
@@ -144,6 +139,9 @@ class ObstacleEnvironment():
 
         self.world_geom = unary_union(polys)
 
+        x, y = grid_shape
+        self.dims  = (x * cfg.CELLS_TO_METERS, y * cfg.CELLS_TO_METERS)
+
 
 
     def get_cell_val(self, x, y):
@@ -154,32 +152,7 @@ class ObstacleEnvironment():
 
 
     def draw_grid(self, screen: pygame.Surface,) -> None:
-        # grid = self.grid
-        # for r in range(grid.shape[0]):
-        #     for c in range(grid.shape[1]):
-        #         rect_points =  scale([c, r, 1, 1,], cfg.CELLS_TO_METERS * cfg.METERS_TO_PIXELS)
-        #         rect = pygame.Rect(*rect_points)
-        #         val = grid[r, c]
-        #         if val == square.EMPTY.value: # nothing
-        #             color = cfg.WHITE
 
-        #         elif val == square.WALL.value:  # wall
-        #             color = cfg.BLACK
-
-        #         elif val == square.HERO.value: # player
-        #             color = cfg.GREEN
-
-        #         elif val == square.GOAL.value: # goal
-        #             color = cfg.YELLOW
-                
-        #         elif val == square.ENEMY.value: # enemy bots
-        #             color = cfg.RED
-
-        #         else:
-        #             color = cfg.BLUE # should not be called
-
-        #         pygame.draw.rect(screen, color, rect) 
-        #         pygame.draw.rect(screen, cfg.GRAY, rect, 1) # grid lines
 
         CELLS_TO_PIXELS = cfg.CELLS_TO_METERS * cfg.METERS_TO_PIXELS
 
