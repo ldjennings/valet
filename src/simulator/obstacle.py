@@ -9,7 +9,7 @@ from shapely.geometry import box
 from shapely.ops import unary_union
 from shapely import Polygon, MultiPolygon
 
-def grid_to_coords(x_cell, y_cell, center=True):
+def grid_to_coords(x_cell, y_cell, center=True) -> list[float]:
     if center:
         x_cell +=.5
         y_cell +=.5

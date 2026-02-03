@@ -3,13 +3,35 @@ from shapely.affinity import rotate, translate
 from shapely.ops import unary_union
 import simulator.config as cfg
 import math
+from shapely.affinity import rotate, translate
+from shapely import Polygon
+from shapely.geometry import box
+from simulator.BotState import BotState
 
-def truck_trailer_geom(x, y, theta, phi):
+
+
+
+
+def make_rect_geom(centerX: float, centerY: float, angle_deg: float, width: float, height:float) -> Polygon:
+    initial = box(-width/2, -height/2, width/2, height/2)
+    rot = rotate(initial, angle_deg)
+    positioned = translate(rot, centerX, centerY)
+
+    return positioned
+
+def rectangular_robot_geom(state: BotState, width: float, height: float) -> Polygon:
+    x, y, a, _ = state
+    return make_rect_geom(x, y, a, width, height)
+
+def truck_trailer_geom(state: BotState):
     """
     Returns a Shapely geometry (truck + trailer + connection)
     given truck rear-axle center (x, y), truck heading theta, and trailer angle phi.
     The trailer is attached directly at the truck's rear axle.
     """
+
+    x, y, theta, phi = state
+
     # shortening the constants 
     TRUCK_LEN = cfg.TRUCK_LENGTH_METERS
     TRUCK_W = cfg.TRUCK_WIDTH_METERS
