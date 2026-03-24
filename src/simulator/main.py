@@ -176,7 +176,7 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument(
         "--geom",
-        choices=["manual", "diff", "car", "trailer"],
+        choices=["point", "diff", "car", "trailer"],
         default="diff",
         help="Bot Geometry to simulate"
     )

@@ -5,6 +5,7 @@ venv/
 # report.pdf
 scratch.py
 scratch.typ
+.vscode/
 
 
 # Created by https://www.toptal.com/developers/gitignore/api/python,visualstudiocode

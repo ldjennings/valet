@@ -1,31 +1,45 @@
 {
-  description = "Valet_Assignment Python dev environment";
+  description = "Valet Assignment - Python simulation dev shell";
 
-  inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-  };
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-  outputs = { self, nixpkgs }:
+  outputs = { nixpkgs, ... }:
     let
       system = "x86_64-linux";
-      pkgs = import nixpkgs { inherit system; };
+      pkgs = nixpkgs.legacyPackages.${system};
+
+      # see https://github.com/nix-community/nix-ld?tab=readme-ov-file#my-pythonnodejsrubyinterpreter-libraries-do-not-find-the-libraries-configured-by-nix-ld
+      # python = pkgs.writeShellScriptBin "python" ''
+      #   export LD_LIBRARY_PATH=$NIX_LD_LIBRARY_PATH
+      #   exec ${pkgs.python312}/bin/python "$@"
+      # '';
     in {
-      devShells.${system}.default =
-        pkgs.buildFHSEnv {
-          name = "valet-dev";
+      devShells.${system}.default = pkgs.mkShell {
+        # NixOS system requirements (add to your NixOS configuration):
+        # nix-ld = {
+        #   enable = true;
+        #   libraries = with pkgs; [
+        #     libgcc.lib # provides libstdc++.so.6, needed to get numpy on python working
+        #     libx11  # needed for manual mode
+        #     libxext # same as above
+        #   ];
+        # };
+        # Without this, pip-installed native packages (numpy, scipy etc.)
+        # will fail to load libstdc++.so.6 at runtime.
+        packages = with pkgs; [
+          python312
+          python312Packages.pip
+          tk
+        ];
 
-          targetPkgs = pkgs: (with pkgs; [
-            python314
-            python314Packages.virtualenv
-            zsh
-            eza
-            fd
-            pkg-config
-            openssl
-
-          ]);
-
-          runScript = "zsh";
-        };
+        shellHook = ''
+          export LD_LIBRARY_PATH=$NIX_LD_LIBRARY_PATH
+          if [ ! -d .venv ]; then
+            python -m venv .venv
+          fi
+          source .venv/bin/activate
+          pip install -e . --quiet
+        '';
+      };
     };
 }
