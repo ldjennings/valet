@@ -15,3 +15,7 @@
 
 [project.scripts]
 runsim="simulator.main:main"
+
+# pyproject.toml
+[tool.mypy]
+python_executable = ".venv/bin/python"

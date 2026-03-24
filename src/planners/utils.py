@@ -1,4 +1,4 @@
-from simulator.BotState import BotState
+# from Bots.BotState import BotState
 from shapely.geometry.base import BaseGeometry
 from simulator.obstacle import ObstacleEnvironment
 import numpy as np

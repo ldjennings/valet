@@ -7,12 +7,6 @@
     let
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
-
-      # see https://github.com/nix-community/nix-ld?tab=readme-ov-file#my-pythonnodejsrubyinterpreter-libraries-do-not-find-the-libraries-configured-by-nix-ld
-      # python = pkgs.writeShellScriptBin "python" ''
-      #   export LD_LIBRARY_PATH=$NIX_LD_LIBRARY_PATH
-      #   exec ${pkgs.python312}/bin/python "$@"
-      # '';
     in {
       devShells.${system}.default = pkgs.mkShell {
         # NixOS system requirements (add to your NixOS configuration):
@@ -29,7 +23,8 @@
         packages = with pkgs; [
           python312
           python312Packages.pip
-          tk
+          python312Packages.mypy
+          python312Packages.ruff      # linter + formatter, replaces flake8/black/isort
         ];
 
         shellHook = ''
