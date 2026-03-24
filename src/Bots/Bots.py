@@ -1,7 +1,7 @@
 from simulator.LatticeConfig import LatticeConfig
 import simulator.config as cfg
 from Bots.BotState import S, PointState, DiffState, CarState, TrailerState
-from Bots.geometry_helpers import point_geom, diff_geom, car_geom, trailer_geom
+from Bots.geometry_helpers import point_geom, diff_geom, car_geom, truck_trailer_geom
 
 import math
 from typing import Protocol, Generic
@@ -123,7 +123,7 @@ class TrailerBot:
     MAX_STEER = math.radians(35)
 
     def footprint(self, state: TrailerState):
-        return trailer_geom(state)
+        return truck_trailer_geom(state)
     
     def primitives(self, state: TrailerState, cfg: LatticeConfig) -> list[TrailerState]:
         return []

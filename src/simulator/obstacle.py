@@ -1,47 +1,14 @@
 import numpy as np
-import matplotlib.pyplot as plt
-import random
 import simulator.config as cfg
+from simulator.draw import draw_shape
+
 import pygame
-from enum import Enum
+import random
 
 from shapely.geometry import box
 from shapely.ops import unary_union
-from shapely import Polygon, MultiPolygon
 
-def grid_to_coords(x_cell, y_cell, center=True) -> list[float]:
-    if center:
-        x_cell +=.5
-        y_cell +=.5
-    
-    return scale((x_cell, y_cell), cfg.CELLS_TO_METERS)
 
-def draw_shape(surface: pygame.Surface, geom, color, width=0):
-    """
-    Draw a Shapely geometry on a pygame surface.
-
-    Args:
-        surface: pygame.Surface to draw on
-        geom: Shapely geometry (Polygon, LineString, MultiPolygon, etc.)
-        color: RGB tuple
-        width: line width (0 = filled)
-    """
-    if geom.geom_type == 'Polygon':
-        pygame.draw.polygon(surface, color, scale(list(geom.exterior.coords)), width)  # type: ignore
-
-    elif geom.geom_type == 'LineString':
-        pygame.draw.lines(surface, color, False, scale(list(geom.coords)), width)  # type: ignore
-
-    elif geom.geom_type == 'MultiPolygon':
-        for g in geom.geoms:  # type: ignore
-            draw_shape(surface, g, color, width)
-
-    elif geom.geom_type == 'GeometryCollection':
-        for g in geom.geoms:
-            draw_shape(surface, g, color, width)
-
-def scale(points, scale = cfg.METERS_TO_PIXELS):
-    return (np.array(points) * scale).tolist()
 
 
 
@@ -160,6 +127,6 @@ class ObstacleEnvironment():
 
         pygame.draw.rect(screen, cfg.WHITE, backing)
 
-        draw_shape(screen, self.world_geom, cfg.BLACK)
-        draw_shape(screen, self.world_geom, cfg.GRAY, 2)
+        draw_shape(screen, self.world_geom, cfg.BLACK, True, cfg.GRAY)
+        # draw_shape(screen, self.world_geom, cfg.GRAY, 2)
 

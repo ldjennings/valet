@@ -1,11 +1,12 @@
+import simulator.config as cfg
+from simulator.obstacle import ObstacleEnvironment
+from simulator.draw import draw_shape
+from simulator.utils import grid_to_coords
+from Bots.Bundle import BotBundle, make_bot
+
 import argparse
 import numpy as np
 import pygame
-import simulator.config as cfg
-from simulator.obstacle import ObstacleEnvironment, draw_shape, grid_to_coords
-# from Bots.Bots import PointBot, CarBot, DiffBot, TrailerBot, Bot
-# from Bots.BotState import PointState, DiffState, CarState, TrailerState, S
-from Bots.Bundle import BotBundle, make_bot
 
 
 
@@ -51,8 +52,10 @@ def run(bundle: BotBundle, environment: ObstacleEnvironment, manual:bool = False
 
         virtual_screen.fill(cfg.BLACK)
         environment.draw_grid(virtual_screen)
-        draw_shape(virtual_screen, geom, col, 0)        # draw robot geometry
-        draw_shape(virtual_screen, geom, cfg.BLACK, 3)  # draw outline of the robot geometry
+        draw_shape(virtual_screen, geom, col, True, cfg.BLACK)        # draw robot geometry
+        # draw_shape(virtual_screen, geom, cfg.BLACK, 3)  # draw outline of the robot geometry
+
+        draw_screen(screen, virtual_screen)
 
         # swithing screen, ticking forward at set rate
         pygame.display.flip()

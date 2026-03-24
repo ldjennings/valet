@@ -9,35 +9,50 @@ from shapely.geometry.base import BaseGeometry
 
 
 
-def make_rect_geom(centerX: float, centerY: float, angle_rad: float, width: float, height:float) -> BaseGeometry:
+def make_rect_geom(centerX: float, centerY: float, angle_rad: float, length: float, width:float) -> BaseGeometry:
     angle_deg = math.degrees(angle_rad)
-    initial = box(-width/2, -height/2, width/2, height/2)
+    initial = box(-length/2, -width/2, length/2, width/2)
     rot = rotate(initial, angle_deg)
     positioned = translate(rot, centerX, centerY)
 
     return positioned
 
+def diff_drive_geom(axle_center_x: float, axle_center_y: float, angle_rad: float, wheelbase: float, length: float, width:float) -> BaseGeometry:
+    rect = box(-length / 2, -width / 2, length / 2, width / 2)
+
+    rear_overhang = length - wheelbase
+    offset = (length / 2) - rear_overhang
+    rect = translate(rect, xoff=offset)
+
+    rect = rotate(rect, math.degrees(angle_rad), origin=(0, 0))
+    rect = translate(rect, xoff=axle_center_x, yoff=axle_center_y)
+    return rect
+
+
+
+
 def point_geom(state: PointState) -> BaseGeometry:
     x, y = state
-    return Point(x, y)
+    return Point(x, y).buffer(1.0) # change it for different radii
 
 def diff_geom(state: DiffState) -> BaseGeometry:
     x, y, heading_rad = state
-    return make_rect_geom(x, y, heading_rad, cfg.ROBOT_WIDTH_METERS, cfg.ROBOT_LENGTH_METERS)
+    return make_rect_geom(x, y, heading_rad, cfg.ROBOT_LENGTH_METERS, cfg.ROBOT_WIDTH_METERS)
 
 def car_geom(state: CarState) -> BaseGeometry:
     x, y, heading_rad = state
-    return make_rect_geom(x, y, heading_rad, cfg.CAR_WIDTH_METERS, cfg.CAR_WIDTH_METERS)
+    # return make_rect_geom(x, y, heading_rad, cfg.CAR_LENGTH_METERS, cfg.CAR_WIDTH_METERS)
+    return diff_drive_geom(x, y, heading_rad, cfg.CAR_WHEELBASE_METERS, cfg.CAR_LENGTH_METERS, cfg.CAR_WIDTH_METERS)
+
+def truck_geom(x: float, y: float, heading_rad: float) -> BaseGeometry:
+    TRUCK_LEN = cfg.TRUCK_LENGTH_METERS
+    TRUCK_WID = cfg.TRUCK_WIDTH_METERS
+    WHEELBASE = cfg.TRUCK_WHEELBASE_METERS
+    return diff_drive_geom(x, y, heading_rad, WHEELBASE, TRUCK_LEN, TRUCK_WID)
 
 
 
-def truck_geom(state: TrailerState) -> BaseGeometry:
-
-    x, y, truck_heading_rad, _ = state
-
-
-
-def trailer_geom(state: TrailerState) -> BaseGeometry:
+def truck_trailer_geom(state: TrailerState) -> BaseGeometry:
     """
     Returns a Shapely geometry (truck + trailer + connection)
     given truck rear-axle center (x, y), truck heading theta, and trailer angle phi.
@@ -46,10 +61,8 @@ def trailer_geom(state: TrailerState) -> BaseGeometry:
 
     x, y, truck_heading_rad, trailer_heading_rad = state
 
-    # shortening the constants 
-    TRUCK_LEN = cfg.TRUCK_LENGTH_METERS
-    TRUCK_WID = cfg.TRUCK_WIDTH_METERS
-    WHEELBASE = cfg.TRUCK_WHEELBASE_METERS
+    truck = truck_geom(x, y, truck_heading_rad)
+
     TRAILER_LEN = cfg.TRAILER_LENGTH_METERS
     TRAILER_WID = cfg.TRAILER_WIDTH_METERS
     D1 = cfg.TRUCK_HITCH_TO_TRAILER_AXLE
@@ -58,30 +71,9 @@ def trailer_geom(state: TrailerState) -> BaseGeometry:
     x_t = x - D1 * math.cos(truck_heading_rad + trailer_heading_rad)
     y_t = y - D1 * math.sin(truck_heading_rad + trailer_heading_rad)
 
-    # truck rectangle with the rear axle at 0,0
-    # truck_rect = Polygon([
-    #     [WHEELBASE, -TRUCK_W/2],
-    #     [-TRUCK_LEN + WHEELBASE, -TRUCK_W/2],
-    #     [-TRUCK_LEN + WHEELBASE,  TRUCK_W/2],
-    #     [WHEELBASE,  TRUCK_W/2]
-    # ])
-    # truck_world = rotate(truck_rect, math.degrees(theta_rad), origin=(0, 0))
-    # truck_world = translate(truck_world, xoff=x, yoff=y)
+    trailer = make_rect_geom(x_t, y_t, truck_heading_rad + trailer_heading_rad, TRAILER_LEN, TRAILER_WID)
 
-    truck = make_rect_geom(x, y, truck_heading_rad, TRUCK_WID, TRUCK_LEN)
-    trailer = make_rect_geom(x_t, y_t, truck_heading_rad + trailer_heading_rad, TRAILER_WID, TRAILER_LEN)
-
-    # trailer rectangle
-    # trailer_rect = Polygon([
-    #     [-TRAILER_LEN/2, -TRAILER_W/2],
-    #     [ TRAILER_LEN/2, -TRAILER_W/2],
-    #     [ TRAILER_LEN/2,  TRAILER_W/2],
-    #     [-TRAILER_LEN/2,  TRAILER_W/2]
-    # ])
-    # trailer_world = rotate(trailer_rect, math.degrees(theta_rad + phi_rad), origin=(0, 0))
-    # trailer_world = translate(trailer_world, xoff=x_t, yoff=y_t)
-
-    # line between them
+    # line between the centers of the rear axles of both
     connection = LineString([(x, y), (x_t, y_t)])
 
-    return unary_union([truck_world, trailer_world, connection])
+    return unary_union([truck, trailer, connection])
