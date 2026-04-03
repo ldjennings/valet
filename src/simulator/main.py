@@ -21,7 +21,8 @@ def wrap_to_pi(ang_rad: float):
 
 
 def run(bundle: BotBundle, environment: ObstacleEnvironment, manual:bool = False):
-    state = bundle.state
+    state = bundle.start
+    goal = bundle.goal
     bot = bundle.bot
 
     # pygame boilerplate
@@ -50,10 +51,14 @@ def run(bundle: BotBundle, environment: ObstacleEnvironment, manual:bool = False
         else:
             col = cfg.GREEN
 
-        virtual_screen.fill(cfg.BLACK)
+        virtual_screen.fill(cfg.WHITE)
         environment.draw_grid(virtual_screen)
+        draw_shape(virtual_screen, bot.footprint(goal), cfg.YELLOW, True, cfg.BLACK) # draw goal before robot so robot overlaps it
+
+
         draw_shape(virtual_screen, geom, col, True, cfg.BLACK)        # draw robot geometry
         # draw_shape(virtual_screen, geom, cfg.BLACK, 3)  # draw outline of the robot geometry
+        
 
         draw_screen(screen, virtual_screen)
 
@@ -110,29 +115,23 @@ def main() -> None:
     args = parse_args()
 
 
-    (x_s, y_s) = grid_to_coords(6,7)
-    (x_g, y_g) = grid_to_coords(cfg.NUM_ROWS - 1, cfg.NUM_COLS -1)
+    match args.bot_type:
+        case "point":   robot_length = 1
+        case "diff":    robot_length = cfg.ROBOT_LENGTH_METERS
+        case "car":     robot_length = cfg.CAR_LENGTH_METERS
+        case "trailer": robot_length = cfg.TRUCK_LENGTH_METERS + cfg.TRAILER_LENGTH_METERS + 2
+        case _:         raise ValueError(args.bot_type)
 
-    bundle = make_bot(args.bot_type, x_s, y_s)
-    environment = ObstacleEnvironment((cfg.NUM_ROWS, cfg.NUM_COLS), .2, .7)
+    robot_length_cell = robot_length / cfg.CELLS_TO_METERS
+
+
+    (x_s, y_s) = grid_to_coords(robot_length_cell / 2 , .25) # tuned by hand because I'm too lazy to come up with something smarter
+    (x_g, y_g) = grid_to_coords(cfg.NUM_ROWS - 1 - (robot_length_cell / 2), cfg.NUM_COLS - .75)
+
+    bundle = make_bot(args.bot_type, (x_s, y_s), (x_g, y_g))
+    environment = ObstacleEnvironment((cfg.NUM_ROWS, cfg.NUM_COLS), .2, robot_length+1)
         
     run(bundle, environment, args.manual)            
-
-    # col = cfg.GREEN
-    # if environment.world_geom.intersects(geom):
-    #     col = cfg.RED
-
-
-    # virtual_screen.fill(cfg.BLACK)
-    # environment.draw_grid(virtual_screen)
-    # draw_shape(virtual_screen, geom, col, 0)        # draw robot geometry
-    # draw_shape(virtual_screen, geom, cfg.BLACK, 3)  # draw outline of the robot geometry
-
-    # draw_screen(screen, virtual_screen)
-
-    # pygame.display.flip()
-    # clock.tick(30)
-
 
 
 if __name__ == "__main__":

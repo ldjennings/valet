@@ -72,10 +72,10 @@ def populate_grid(grid_shape: tuple[int, int], probability: float) -> np.ndarray
 def clear_start_goal(grid: np.ndarray, robot_length: int):
     print(f"Clearing {robot_length} cells")
     # clearing space for start position
-    grid[0:robot_length, 0:robot_length] = 0
+    grid[0:2, 0:robot_length] = 0
 
     # clearing bottom right corner
-    grid[-robot_length:, -robot_length:] = 0
+    grid[-2:, -robot_length:] = 0
 
 class ObstacleEnvironment():
     '''
@@ -111,9 +111,9 @@ class ObstacleEnvironment():
 
 
 
-    def get_cell_val(self, x, y):
-        x_cell = x // cfg.CELLS_TO_METERS
-        y_cell = y // cfg.CELLS_TO_METERS
+    def get_cell_val(self, x: float, y: float):
+        x_cell = int(x // cfg.CELLS_TO_METERS)
+        y_cell = int(y // cfg.CELLS_TO_METERS)
 
         return self.grid[x_cell][y_cell]
 
@@ -121,11 +121,11 @@ class ObstacleEnvironment():
     def draw_grid(self, screen: pygame.Surface,) -> None:
 
 
-        CELLS_TO_PIXELS = cfg.CELLS_TO_METERS * cfg.METERS_TO_PIXELS
+        # CELLS_TO_PIXELS = cfg.CELLS_TO_METERS * cfg.METERS_TO_PIXELS
 
-        backing = pygame.Rect(0,0, cfg.NUM_COLS * CELLS_TO_PIXELS, cfg.NUM_ROWS * CELLS_TO_PIXELS)
+        # backing = pygame.Rect(0,0, cfg.NUM_COLS * CELLS_TO_PIXELS, cfg.NUM_ROWS * CELLS_TO_PIXELS)
 
-        pygame.draw.rect(screen, cfg.WHITE, backing)
+        # pygame.draw.rect(screen, cfg.WHITE, backing)
 
         draw_shape(screen, self.world_geom, cfg.BLACK, True, cfg.GRAY)
         # draw_shape(screen, self.world_geom, cfg.GRAY, 2)
