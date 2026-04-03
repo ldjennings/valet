@@ -111,6 +111,7 @@ def main() -> None:
 
 
     (x_s, y_s) = grid_to_coords(6,7)
+    (x_g, y_g) = grid_to_coords(cfg.NUM_ROWS - 1, cfg.NUM_COLS -1)
 
     bundle = make_bot(args.bot_type, x_s, y_s)
     environment = ObstacleEnvironment((cfg.NUM_ROWS, cfg.NUM_COLS), .2, .7)

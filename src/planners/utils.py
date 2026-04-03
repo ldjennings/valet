@@ -1,13 +1,28 @@
 # from Bots.BotState import BotState
 from shapely.geometry.base import BaseGeometry
 from simulator.obstacle import ObstacleEnvironment
+from Bots.BotState import S
+from Bots.Bots import Bot, check_collision
 import numpy as np
 import heapq
 
+from dataclasses import dataclass
+import math
 
-# based off of wikipedia article, particularly the pseudocode found here: https://en.wikipedia.org/wiki/A*_search_algorithm#Pseudocode
 
-# def astar(grid: ObstacleEnvironment, start: BotState, goal: BotState) -> list[BotState] | None:
+
+@dataclass
+class LatticeConfig:
+    spacing: float
+    terminal_radius: float
+    angular_spacing: float = math.pi / 4
+    angular_terminal: float = math.pi / 8
+    trailer_angular_terminal: float = math.pi / 6  
+
+
+# # based off of wikipedia article, particularly the pseudocode found here: https://en.wikipedia.org/wiki/A*_search_algorithm#Pseudocode
+
+# def astar(grid: ObstacleEnvironment, bot: Bot, start: S, goal: S, config: LatticeConfig) -> list[S] | None:
 #     grid_width, grid_height = grid.dims
 #     open_set = []
 #     heapq.heappush(open_set, (0, start))
@@ -18,20 +33,12 @@ import heapq
 #         # Manhattan distance
 #         return abs(p1[0]-p2[0]) + abs(p1[1]-p2[1])
     
-#     def get_neighbors(row: int, column: int) -> list[tuple[int,int]]:
-#         neighbors = []
-#         for dr, dc in [(1,0), (-1,0), (0,1), (0,-1)]:
-#             nr, nc = row + dr, column + dc
-#             neighbor = (nr, nc)
-
-#             if 0 <= nr < grid_width and 0 <= nc < grid_height:
-#                 neighbors.append(neighbor)
-        
-#         return neighbors
-
 #     while open_set:
 #         _, current = heapq.heappop(open_set)
-#         if current == goal:
+        
+#         if bot.is_terminal(current, goal, config):
+#             # TODO: last-mile connection to exact goal via BVP/Reeds-Shepp
+#             # for now just reconstruct path to nearest lattice node
 #             # reconstruct path
 #             path = []
 #             while current in came_from:
@@ -40,9 +47,9 @@ import heapq
 #             path.reverse()
 #             return path
 
-#         r, c = current
-#         for neighbor in get_neighbors(r,c):
-#             if grid[neighbor] != 1 and grid[neighbor] != 4:
+        
+#         for neighbor in bot.primitives(current, config):
+#             if :  # valid neighbor check
 #                 tentative_g = g_score[current] + 1
 #                 if tentative_g < g_score.get(neighbor, float("inf")):
 #                     came_from[neighbor] = current

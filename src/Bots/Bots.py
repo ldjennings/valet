@@ -1,4 +1,4 @@
-from simulator.LatticeConfig import LatticeConfig
+from planners.LatticeConfig import LatticeConfig
 import simulator.config as cfg
 from Bots.BotState import S, PointState, DiffState, CarState, TrailerState
 from Bots.geometry_helpers import point_geom, diff_geom, car_geom, truck_trailer_geom
@@ -15,17 +15,70 @@ DT = 1/30
 
 
 
+
 class Bot(Protocol[S]):
-    def footprint(self, state: S) -> BaseGeometry: ...
-    def primitives(self, state: S, cfg: LatticeConfig) -> list[S]: ...
-    def is_terminal(self, state: S, goal: S, cfg: LatticeConfig) -> bool: ...
-    def connect_to_goal(self, state: S, goal: S) -> list[S] | None: ...
-    def handle_input(self, state: S, speed: float) -> S: ...
+    """
+    Structural protocol defining the interface all bot types must satisfy.
+    Generic over S (the state type) — a Bot[PointState] only accepts PointState,
+    a Bot[DiffState] only accepts DiffState, etc.
 
+    Uses Protocol rather than ABC so implementing classes don't need to explicitly
+    inherit from Bot — the type checker verifies the interface is satisfied
+    structurally based on method signatures alone.
+    """
 
+    def footprint(self, state: S) -> BaseGeometry:
+        """Returns the robot's collision geometry at the given state as a Shapely object."""
+        ...
+
+    def primitives(self, state: S, cfg: LatticeConfig) -> list[S]:
+        """
+        Returns the list of reachable neighbor states from the given state,
+        based on the precomputed primitive table for this bot and lattice config.
+        """
+        ...
+
+    def is_terminal(self, state: S, goal: S, cfg: LatticeConfig) -> bool:
+        """
+        Returns True if state is close enough to goal to fire the terminal
+        connection. Checks position for all bots, plus heading for diff/car/trailer,
+        plus hitch angle for trailer.
+        """
+        ...
+
+    def connect_to_goal(self, state: S, goal: S) -> list[S] | None:
+        """
+        Generates the terminal path segment from state to the exact goal,
+        bypassing the lattice for the final approach.
+        Returns None if no feasible connection exists within terminal radius.
+        # TODO: implement per-bot BVP solver for exact goal connection.
+        """
+        ...
+
+    def handle_input(self, state: S, speed: float) -> S:
+        """
+        Applies keyboard input to produce the next state. Used in manual mode
+        for debugging kinematics before trusting the planner.
+        Kinematically correct — uses the same step() functions as primitive generation.
+        """
+        ...
+
+def check_collision(bot: Bot, state: S, obstacle: BaseGeometry) -> bool:
+    """
+    Returns True if the bot's footprint at the given state intersects the obstacle geometry.
+    Defined as a free function rather than a protocol method because the implementation
+    is identical for all bots.
+    """
+    return bot.footprint(state).intersects(obstacle)
 
 @dataclass
 class BotBundle(Generic[S]):
+    """
+    Pairs a bot with its current state, binding them to the same S.
+    Without this, the type checker can't verify that the bot and state
+    passed to run() are the same geometry type — a Bot[PointState] with
+    a DiffState would be a runtime error but a static type mystery.
+    """
     bot: Bot[S]
     state: S
 
