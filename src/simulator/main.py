@@ -48,9 +48,13 @@ def run(bundle: BotBundle, environment: ObstacleEnvironment, manual: bool = Fals
                 running = False
         
         if manual:
-            state = bot.handle_input(state, 2.0)
+            state = bot.handle_input(state, 6.0)
         # else:
         #     state = planner.next_state(state)
+
+        if bot.at_goal(state, goal):
+            running = False
+            print("Goal state reached.")
             
 
         geom = bot.footprint(state)

@@ -1,3 +1,5 @@
+import math
+
 # screen/environment stuff
 NUM_ROWS, NUM_COLS = 12, 12
 CELL_SIZE = 15
@@ -9,6 +11,10 @@ CELLS_TO_METERS = 3
 METERS_TO_PIXELS = min(VIRTUAL_SIZE[0] // (NUM_COLS * CELLS_TO_METERS), VIRTUAL_SIZE[1] // (NUM_ROWS * CELLS_TO_METERS))
 
 
+goal_radius_tolerance: float = .25
+# goal_radius_tolerance: float = 5
+goal_heading_tolerance: float = math.pi / 16
+trailer_heading_tolerance: float = math.pi / 6
 
 
 # differential drive robot dimensions

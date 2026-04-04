@@ -1,6 +1,6 @@
 from planners.LatticeConfig import LatticeConfig
 import simulator.config as cfg
-from Bots.BotState import S, PointState, DiffState, CarState, TrailerState
+from Bots.BotState import S, PointState, DiffState, CarState, TrailerState, center_distance, angle_distance_rad
 from Bots.geometry_helpers import point_geom, diff_geom, car_geom, truck_trailer_geom
 
 import math
@@ -46,6 +46,14 @@ class Bot(Protocol[S]):
         """
         ...
 
+    def at_goal(self, state: S, goal: S) -> bool:
+        """
+        Returns True if state is close enough to goal state to end simulation. 
+        Checks position for all bots, plus heading for diff/car/trailer, plus 
+        hitch angle for trailer.
+        """
+        ...
+
     def connect_to_goal(self, state: S, goal: S) -> list[S] | None:
         """
         Generates the terminal path segment from state to the exact goal,
@@ -71,16 +79,6 @@ def check_collision(bot: Bot, state: S, obstacle: BaseGeometry) -> bool:
     """
     return bot.footprint(state).intersects(obstacle)
 
-@dataclass
-class BotBundle(Generic[S]):
-    """
-    Pairs a bot with its current state, binding them to the same S.
-    Without this, the type checker can't verify that the bot and state
-    passed to run() are the same geometry type — a Bot[PointState] with
-    a DiffState would be a runtime error but a static type mystery.
-    """
-    bot: Bot[S]
-    state: S
 
 class PointBot:
     def footprint(self, state: PointState):
@@ -91,6 +89,9 @@ class PointBot:
     
     def is_terminal(self, state: PointState, goal: PointState, cfg: LatticeConfig) -> bool:
         return False
+    
+    def at_goal(self, state: PointState, goal: PointState) -> bool:
+        return center_distance(state, goal) < cfg.goal_radius_tolerance
     
     def connect_to_goal(self, state: PointState, goal: PointState) -> list[PointState] | None: 
         return None
@@ -123,6 +124,10 @@ class DiffBot:
     def is_terminal(self, state: DiffState, goal: DiffState, cfg: LatticeConfig) -> bool:
         return False
     
+    def at_goal(self, state: DiffState, goal: DiffState) -> bool:
+        return center_distance(state, goal) < cfg.goal_radius_tolerance and \
+               abs(angle_distance_rad(state.heading_rad, goal.heading_rad)) < cfg.goal_heading_tolerance
+    
     def connect_to_goal(self, state: DiffState, goal: DiffState) -> list[DiffState] | None: 
         return None
     
@@ -151,6 +156,10 @@ class CarBot:
     
     def is_terminal(self, state: CarState, goal: CarState, cfg: LatticeConfig) -> bool:
         return False
+    
+    def at_goal(self, state: CarState, goal: CarState) -> bool:
+        return center_distance(state, goal) < cfg.goal_radius_tolerance and \
+               abs(angle_distance_rad(state.heading_rad, goal.heading_rad)) < cfg.goal_heading_tolerance
     
     def connect_to_goal(self, state: CarState, goal: CarState) -> list[CarState] | None: 
         return None
@@ -183,6 +192,11 @@ class TrailerBot:
     
     def is_terminal(self, state: TrailerState, goal: TrailerState, cfg: LatticeConfig) -> bool:
         return False
+    
+    def at_goal(self, state: TrailerState, goal: TrailerState) -> bool:
+        return center_distance(state, goal) < cfg.goal_radius_tolerance and \
+               abs(angle_distance_rad(state.heading_rad, goal.heading_rad)) < cfg.goal_heading_tolerance and \
+               abs(angle_distance_rad(state.heading_rad, goal.heading_rad)) < cfg.trailer_heading_tolerance
     
     def connect_to_goal(self, state: TrailerState, goal: TrailerState) -> list[TrailerState] | None: 
         return None
