@@ -10,21 +10,16 @@ import numpy as np
 import pygame
 
 
-
-
-def wrap_to_pi(ang_rad: float):
-    """Wraps arbitrary radian angle to pi to negative pi"""
-
-    return (ang_rad + np.pi) % (2 * np.pi) - np.pi
-
-
 def surface_to_numpy(surface: pygame.Surface) -> np.ndarray:
     return pygame.surfarray.array3d(surface).swapaxes(0, 1)
 
 
-
-
-def run(bundle: BotBundle, environment: ObstacleEnvironment, manual: bool = False, record: bool = False):
+def run(
+    bundle: BotBundle,
+    environment: ObstacleEnvironment,
+    manual: bool = False,
+    record: bool = False,
+):
     state = bundle.start
     goal = bundle.goal
     bot = bundle.bot
@@ -46,30 +41,29 @@ def run(bundle: BotBundle, environment: ObstacleEnvironment, manual: bool = Fals
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-        
+
         if manual:
-            state = bot.handle_input(state, 6.0)
+            next_state = bot.handle_input(state, 3.0)
+            next_geom = bot.footprint(next_state)
+            if environment.is_valid_state(next_geom):
+                state = next_state
         # else:
         #     state = planner.next_state(state)
 
         if bot.at_goal(state, goal):
             running = False
             print("Goal state reached.")
-            
 
         geom = bot.footprint(state)
 
-        if environment.world_geom.intersects(geom):
-            col = cfg.RED
-        else:
-            col = cfg.GREEN
 
         virtual_screen.fill(cfg.WHITE)
         environment.draw_grid(virtual_screen)
-        draw_shape(virtual_screen, bot.footprint(goal), cfg.YELLOW, True, cfg.BLACK) # draw goal before robot so robot overlaps it
+        draw_shape(
+            virtual_screen, bot.footprint(goal), cfg.YELLOW, True, cfg.BLACK
+        )  # draw goal before robot so robot overlaps it
 
-
-        draw_shape(virtual_screen, geom, col, True, cfg.BLACK)        # draw robot geometry        
+        draw_shape(virtual_screen, geom, cfg.GREEN, True, cfg.BLACK)  # draw robot geometry
 
         draw_screen(screen, virtual_screen)
         recorder.capture(screen)
@@ -81,8 +75,6 @@ def run(bundle: BotBundle, environment: ObstacleEnvironment, manual: bool = Fals
     recorder.save()
 
 
-
-
 def draw_screen(screen: pygame.Surface, virtual_screen: pygame.Surface):
     # Preserving aspect ratio
     window_width, window_height = screen.get_size()
@@ -91,43 +83,41 @@ def draw_screen(screen: pygame.Surface, virtual_screen: pygame.Surface):
     # scaling the virtual surface to the actual screen size
     scaled_surface = pygame.transform.smoothscale(
         virtual_screen,
-        (int(cfg.VIRTUAL_SIZE[0] * scale), int(cfg.VIRTUAL_SIZE[1] * scale))
+        (int(cfg.VIRTUAL_SIZE[0] * scale), int(cfg.VIRTUAL_SIZE[1] * scale)),
     )
     # centering the screen
     offset = (
         (window_width - scaled_surface.get_width()) // 2,
-        (window_height - scaled_surface.get_height()) // 2
+        (window_height - scaled_surface.get_height()) // 2,
     )
 
     screen.fill(cfg.BLACK)
     screen.blit(scaled_surface, offset)
 
 
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        prog="valet sim",
-        description="simulator for RBE 550 assignment"
+        prog="valet sim", description="simulator for RBE 550 assignment"
     )
     parser.add_argument(
         "-m",
         "--manual",
         action="store_true",
-        help="Choice to manually control the bots state through key presses."
+        help="Choice to manually control the bots state through key presses.",
     )
 
     parser.add_argument(
         "-r",
         "--record",
         action="store_true",
-        help="Choice to save the pygame output as an mp4 file ('./recording.mp4' by default)."
+        help="Choice to save the pygame output as an mp4 file ('./recording.mp4' by default).",
     )
 
     parser.add_argument(
         "--bot_type",
         choices=["point", "diff", "car", "trailer"],
         default="diff",
-        help="Type of bot to simulate"
+        help="Type of bot to simulate",
     )
     return parser.parse_args()
 
@@ -135,26 +125,33 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-
     match args.bot_type:
-        case "point":   robot_length = 1
-        case "diff":    robot_length = cfg.ROBOT_LENGTH_METERS
-        case "car":     robot_length = cfg.CAR_LENGTH_METERS
-        case "trailer": robot_length = cfg.TRUCK_LENGTH_METERS + cfg.TRAILER_LENGTH_METERS + 2
-        case _:         raise ValueError(args.bot_type)
+        case "point":
+            robot_length = 1
+        case "diff":
+            robot_length = cfg.ROBOT_LENGTH_METERS
+        case "car":
+            robot_length = cfg.CAR_LENGTH_METERS
+        case "trailer":
+            robot_length = cfg.TRUCK_LENGTH_METERS + cfg.TRAILER_LENGTH_METERS + 2
+        case _:
+            raise ValueError(args.bot_type)
 
     robot_length_cell = robot_length / cfg.CELLS_TO_METERS
 
-
-    (x_s, y_s) = grid_to_coords(robot_length_cell / 2 , .25) # tuned by hand because I'm too lazy to come up with something smarter
-    (x_g, y_g) = grid_to_coords(cfg.NUM_ROWS - 1 - (robot_length_cell / 2), cfg.NUM_COLS - .75)
+    (x_s, y_s) = grid_to_coords(
+        robot_length_cell / 2, 0.25
+    )  # tuned by hand because I'm too lazy to come up with something smarter
+    (x_g, y_g) = grid_to_coords(
+        cfg.NUM_ROWS - 1 - (robot_length_cell / 2), cfg.NUM_COLS - 1
+    )
 
     bundle = make_bot(args.bot_type, (x_s, y_s), (x_g, y_g))
-    environment = ObstacleEnvironment((cfg.NUM_ROWS, cfg.NUM_COLS), .2, robot_length+1)
-        
-    run(bundle, environment, args.manual, args.record)   
+    environment = ObstacleEnvironment(
+        (cfg.NUM_ROWS, cfg.NUM_COLS), 0.2, robot_length + 1
+    )
 
-
+    run(bundle, environment, args.manual, args.record)
 
 
 if __name__ == "__main__":
