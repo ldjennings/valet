@@ -10,6 +10,8 @@ from shapely.geometry import box
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
 
+def intersects_any(tree: STRtree, geom: BaseGeometry) -> bool:
+    return len(tree.query(geom, predicate='intersects')) > 0
 
 def placeRandomUnoccupied(
     grid: np.ndarray, val, modify: bool = True
@@ -114,7 +116,7 @@ class ObstacleEnvironment:
                     )
 
         # TODO: convert to STRtree
-        self.obstacles = unary_union(polys)
+        self.obstacles = STRtree(polys)
 
         x, y = grid_shape
 
@@ -129,18 +131,13 @@ class ObstacleEnvironment:
         return self.grid[x_cell][y_cell]
     
     def is_valid_state(self, bot_geom: BaseGeometry) -> bool:
-        return not bot_geom.intersects(self.obstacles) and self.enclosure_geom.contains(bot_geom)
+        return not intersects_any(self.obstacles, bot_geom) and self.enclosure_geom.contains(bot_geom)
 
     def draw_grid(
         self,
         screen: pygame.Surface,
     ) -> None:
+        # print(type(self.obstacles.geometries[0]))
+        for g in self.obstacles.geometries:
+            draw_shape(screen, g, cfg.BLACK, True, cfg.GRAY)
 
-        # CELLS_TO_PIXELS = cfg.CELLS_TO_METERS * cfg.METERS_TO_PIXELS
-
-        # backing = pygame.Rect(0,0, cfg.NUM_COLS * CELLS_TO_PIXELS, cfg.NUM_ROWS * CELLS_TO_PIXELS)
-
-        # pygame.draw.rect(screen, cfg.WHITE, backing)
-
-        draw_shape(screen, self.obstacles, cfg.BLACK, True, cfg.GRAY)
-        # draw_shape(screen, self.world_geom, cfg.GRAY, 2)
