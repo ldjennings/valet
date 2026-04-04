@@ -1,4 +1,5 @@
 import simulator.config as cfg
+import simulator.recorder as rec
 from simulator.obstacle import ObstacleEnvironment
 from simulator.draw import draw_shape
 from simulator.utils import grid_to_coords
@@ -11,19 +12,27 @@ import pygame
 
 
 
-
 def wrap_to_pi(ang_rad: float):
     """Wraps arbitrary radian angle to pi to negative pi"""
 
     return (ang_rad + np.pi) % (2 * np.pi) - np.pi
 
 
+def surface_to_numpy(surface: pygame.Surface) -> np.ndarray:
+    return pygame.surfarray.array3d(surface).swapaxes(0, 1)
 
 
-def run(bundle: BotBundle, environment: ObstacleEnvironment, manual:bool = False):
+
+
+def run(bundle: BotBundle, environment: ObstacleEnvironment, manual: bool = False, record: bool = False):
     state = bundle.start
     goal = bundle.goal
     bot = bundle.bot
+
+    if record:
+        recorder = rec.MP4Recorder()
+    else:
+        recorder = rec.NoOpRecorder()
 
     # pygame boilerplate
     pygame.init()
@@ -56,15 +65,16 @@ def run(bundle: BotBundle, environment: ObstacleEnvironment, manual:bool = False
         draw_shape(virtual_screen, bot.footprint(goal), cfg.YELLOW, True, cfg.BLACK) # draw goal before robot so robot overlaps it
 
 
-        draw_shape(virtual_screen, geom, col, True, cfg.BLACK)        # draw robot geometry
-        # draw_shape(virtual_screen, geom, cfg.BLACK, 3)  # draw outline of the robot geometry
-        
+        draw_shape(virtual_screen, geom, col, True, cfg.BLACK)        # draw robot geometry        
 
         draw_screen(screen, virtual_screen)
+        recorder.capture(screen)
 
         # swithing screen, ticking forward at set rate
         pygame.display.flip()
         clock.tick(30)
+
+    recorder.save()
 
 
 
@@ -103,6 +113,13 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "-r",
+        "--record",
+        action="store_true",
+        help="Choice to save the pygame output as an mp4 file ('./recording.mp4' by default)."
+    )
+
+    parser.add_argument(
         "--bot_type",
         choices=["point", "diff", "car", "trailer"],
         default="diff",
@@ -131,7 +148,9 @@ def main() -> None:
     bundle = make_bot(args.bot_type, (x_s, y_s), (x_g, y_g))
     environment = ObstacleEnvironment((cfg.NUM_ROWS, cfg.NUM_COLS), .2, robot_length+1)
         
-    run(bundle, environment, args.manual)            
+    run(bundle, environment, args.manual, args.record)   
+
+
 
 
 if __name__ == "__main__":
