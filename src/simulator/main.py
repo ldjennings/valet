@@ -1,7 +1,7 @@
 import simulator.config as cfg
 from simulator.recorder import MP4Recorder, NoOpRecorder
 from simulator.obstacle import ObstacleEnvironment
-from simulator.draw import render
+from simulator.render import Renderer
 from simulator.utils import grid_to_coords
 from Bots.Bundle import BotBundle, make_bot
 from Bots.BotState import S
@@ -21,13 +21,12 @@ def surface_to_numpy(surface: pygame.Surface) -> np.ndarray:
     return pygame.surfarray.array3d(surface).swapaxes(0, 1)
 
 
-def init_pygame() -> tuple[pygame.Surface, pygame.Surface, pygame.time.Clock]:
+def init_pygame(starterkit: BotBundle, env: ObstacleEnvironment) -> tuple[Renderer, pygame.time.Clock]:
     pygame.init()
-    next_frame = pygame.Surface(cfg.VIRTUAL_SIZE)
-    screen         = pygame.display.set_mode(cfg.VIRTUAL_SIZE, pygame.RESIZABLE)
+    renderer = Renderer(starterkit.bot, starterkit.goal, env)
     clock          = pygame.time.Clock()
-    pygame.display.set_caption("Planner Sim")
-    return next_frame, screen, clock
+    
+    return renderer, clock
 
 def run(
     bundle: BotBundle[S],
@@ -35,14 +34,15 @@ def run(
     manual: bool = False,
     record: bool = False,
 ):
-    state = bundle.start
-    goal = bundle.goal
-    bot = bundle.bot
 
-    recorder = MP4Recorder() if record else NoOpRecorder()
-    next_frame, screen, clock = init_pygame()
+
+    recorder        = MP4Recorder() if record else NoOpRecorder()   # screen recorder
+    renderer, clock = init_pygame(bundle, environment)              # screen renderer (homemade) and clock
+    state           = bundle.start                                  # starting state
+    goal            = bundle.goal                                   # goal state
+    bot             = bundle.bot                                    # bot type
     # immediately draw to screen before waiting for input/path planning
-    render(screen, next_frame, bot, state, goal, environment, None)
+    renderer.render(state)
 
 
     primitives = PrimitiveTable(bot, lat_conf)
@@ -62,11 +62,12 @@ def run(
             if event.type == pygame.QUIT:
                 running = False
 
-        recorder.capture(screen)
+        recorder.capture(renderer.screen)
 
         if manual:
             next_state = bot.handle_input(state, 3.0)
             next_geom = bot.footprint(next_state)
+            
             if environment.is_valid_state(next_geom):
                 state = next_state
         else:
@@ -76,8 +77,7 @@ def run(
                 path_index += 1
 
 
-
-        render(screen, next_frame, bot, state, goal, environment, path)
+        renderer.render(state, path)
         clock.tick(30)
 
 
