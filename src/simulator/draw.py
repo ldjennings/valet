@@ -1,10 +1,13 @@
 import pygame
 import pygame.gfxdraw
-from simulator.utils import scale
+
 from Bots.BotState import S
 from shapely.geometry import linestring
+import numpy as np
+import simulator.config as cfg
 
-
+def scale(points, scale=cfg.METERS_TO_PIXELS):
+    return (np.array(points) * scale).tolist()
 
 
 def draw_shape(
