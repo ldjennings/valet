@@ -45,7 +45,6 @@ class PrimitiveTable(Generic[S]):
             for dx, dy in itertools.product(range(-1, 2), repeat=2)
             if (dx, dy) != (0, 0)
         ]
-        print(len(offsets))
 
         start = bot.make_state(0,0)
 
@@ -105,11 +104,4 @@ class PrimitiveTable(Generic[S]):
         x, y, *rest = s
         return type(s)(x + dx, y + dy, *rest)
 
-b = PointBot()
-
-
-p = PrimitiveTable(b, LatticeConfig(.5))
-
-collected = [p for p in p.get(PointState(-4,0))]
-print(len(collected))
 

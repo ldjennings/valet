@@ -72,13 +72,12 @@ def populate_grid(grid_shape: tuple[int, int], probability: float) -> np.ndarray
     return grid
 
 
-def clear_start_goal(grid: np.ndarray, robot_length: int):
-    print(f"Clearing {robot_length} cells")
+def clear_start_goal(grid: np.ndarray, clearance: int):
     # clearing space for start position
-    grid[0:2, 0:robot_length] = 0
+    grid[0:2, 0:clearance] = 0
 
     # clearing bottom right corner
-    grid[-2:, -robot_length:] = 0
+    grid[-2:, -clearance:] = 0
 
 
 class ObstacleEnvironment:
@@ -92,13 +91,13 @@ class ObstacleEnvironment:
     """
 
     def __init__(
-        self, grid_shape: tuple[int, int], proportion_filled: float, robot_length: float
+        self, grid_shape: tuple[int, int], proportion_filled: float, cells_to_clear: int
     ) -> None:
         self.grid: np.ndarray = populate_grid(grid_shape, proportion_filled)
 
-        robot_cell_length = int((robot_length // cfg.CELLS_TO_METERS) + 1)
+        # robot_cell_length = int((robot_length // cfg.CELLS_TO_METERS) + 1)
 
-        clear_start_goal(self.grid, robot_cell_length)
+        clear_start_goal(self.grid, cells_to_clear)
 
         CELL_SIZE = cfg.CELLS_TO_METERS
         polys = []

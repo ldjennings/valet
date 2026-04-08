@@ -26,12 +26,12 @@ def hybrid_astar(env: ObstacleEnvironment, bot: Bot, start: S, goal: S, config: 
         return math.hypot(x2 - x1, y2 - y1)
     
     def reconstruct_final_path(stop_state: S, origin_paths: dict[S, S]) -> list[S]:
-        path = []
+        path = [goal]
 
         previous_node = stop_state
         while previous_node in came_from:
             path.append(previous_node)
-            previous_node = came_from[previous_node]
+            previous_node = origin_paths[previous_node]
 
         path.append(previous_node)
         path.reverse()
@@ -66,8 +66,9 @@ def hybrid_astar(env: ObstacleEnvironment, bot: Bot, start: S, goal: S, config: 
             # for now just reconstruct path to nearest lattice node
             # reconstruct path
             # TODO: make this use primitives instead of just the points
-
-            return reconstruct_final_path(current, came_from)
+            attempted_path = bot.generate_trajectory(current, goal)
+            if attempted_path is not None and path_is_valid(attempted_path):
+                return reconstruct_final_path(current, came_from)
 
         # explore neighbors
         for prim in prims.get(current):

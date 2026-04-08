@@ -88,7 +88,7 @@ class PointBot:
     def is_terminal(
         self, state: PointState, goal: PointState, cfg: LatticeConfig
     ) -> bool:
-        return center_distance(state, goal) < 5.0
+        return center_distance(state, goal) < 1.0
 
     def at_goal(self, state: PointState, goal: PointState) -> bool:
         return center_distance(state, goal) < cfg.goal_radius_tolerance

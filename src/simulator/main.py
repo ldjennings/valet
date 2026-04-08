@@ -14,7 +14,7 @@ import argparse
 import numpy as np
 import pygame
 
-lat_conf = LatticeConfig(1)
+lat_conf = LatticeConfig(.25)
 
 
 def surface_to_numpy(surface: pygame.Surface) -> np.ndarray:
@@ -23,11 +23,11 @@ def surface_to_numpy(surface: pygame.Surface) -> np.ndarray:
 
 def init_pygame() -> tuple[pygame.Surface, pygame.Surface, pygame.time.Clock]:
     pygame.init()
-    virtual_screen = pygame.Surface(cfg.VIRTUAL_SIZE)
+    next_frame = pygame.Surface(cfg.VIRTUAL_SIZE)
     screen         = pygame.display.set_mode(cfg.VIRTUAL_SIZE, pygame.RESIZABLE)
     clock          = pygame.time.Clock()
     pygame.display.set_caption("Planner Sim")
-    return virtual_screen, screen, clock
+    return next_frame, screen, clock
 
 def draw_frame(
     surface: pygame.Surface,
@@ -44,6 +44,13 @@ def draw_frame(
     draw_shape(surface, bot.footprint(goal), cfg.YELLOW, True, cfg.BLACK)
     draw_shape(surface, bot.footprint(state), cfg.GREEN, True, cfg.BLACK)
 
+def render(screen: pygame.Surface, next_frame: pygame.Surface, bot: Bot, state: S, goal: S, env: ObstacleEnvironment, path: list[S] | None):
+    draw_frame(next_frame, bot, state, goal, env, path)
+    draw_to_screen(screen, next_frame)
+    pygame.display.flip()
+
+
+
 
 def run(
     bundle: BotBundle[S],
@@ -56,7 +63,10 @@ def run(
     bot = bundle.bot
 
     recorder = MP4Recorder() if record else NoOpRecorder()
-    virtual_screen, screen, clock = init_pygame()
+    next_frame, screen, clock = init_pygame()
+    # immediately draw to screen before waiting for input/path planning
+    render(screen, next_frame, bot, state, goal, environment, None)
+
 
     primitives = PrimitiveTable(bot, lat_conf)
 
@@ -68,15 +78,14 @@ def run(
         path = hybrid_astar(environment, bot, bundle.start, goal, lat_conf, primitives)
         if path is None:
             print("No path found.")
-            # instead of exiting, wait for user to close window before exiting
-            # this allows debugging
-            # return
 
     running = True
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+
+        recorder.capture(screen)
 
         if manual:
             next_state = bot.handle_input(state, 3.0)
@@ -89,17 +98,11 @@ def run(
                 state = path[path_index]
                 path_index += 1
 
-        if bot.at_goal(state, goal):
-            # running = False
-            print("Goal state reached.")
 
-        draw_frame(virtual_screen, bot, state, goal, environment, path)
-        draw_to_screen(screen, virtual_screen)
-        recorder.capture(screen)
 
-        # swithing screen, ticking forward at set rate
-        pygame.display.flip()
+        render(screen, next_frame, bot, state, goal, environment, path)
         clock.tick(30)
+
 
     recorder.save()
 
@@ -156,24 +159,31 @@ def main() -> None:
 
     match args.bot_type:
         case "point":
-            robot_length = 1
+            startxy = grid_to_coords(0, 0)  
+            goalxy  = grid_to_coords(cfg.NUM_ROWS - 1, cfg.NUM_COLS - 1)
+            cell_clearance = 1
         case "diff":
-            robot_length = cfg.ROBOT_LENGTH_METERS
+            startxy = grid_to_coords( .5, 0.5)  
+            goalxy  = grid_to_coords(cfg.NUM_ROWS - 1, cfg.NUM_COLS - 1)
+            cell_clearance = 1
         case "car":
-            robot_length = cfg.CAR_LENGTH_METERS
+            startxy = grid_to_coords( .5, 0.5)  
+            goalxy  = grid_to_coords(cfg.NUM_ROWS - 1, cfg.NUM_COLS - 1)
+            cell_clearance = 2
         case "trailer":
-            robot_length = cfg.TRUCK_LENGTH_METERS + cfg.TRAILER_LENGTH_METERS + 2
+            startxy = grid_to_coords( .5, 0.5)  
+            goalxy  = grid_to_coords(cfg.NUM_ROWS - 1, cfg.NUM_COLS - 1)
+            cell_clearance = 3
         case _:
             raise ValueError(args.bot_type)
 
-    robot_length_cell = robot_length / cfg.CELLS_TO_METERS
+    
 
     # tuned by hand because I'm too lazy to come up with something smarter
-    startxy = grid_to_coords(robot_length_cell / 2, 0.25)  
-    goalxy  = grid_to_coords(cfg.NUM_ROWS - 1 - (robot_length_cell / 2), cfg.NUM_COLS - 1)
+
 
     bundle = make_bot(args.bot_type, startxy, goalxy)
-    environment = ObstacleEnvironment((cfg.NUM_ROWS, cfg.NUM_COLS), 0.2, robot_length + 1)
+    environment = ObstacleEnvironment((cfg.NUM_ROWS, cfg.NUM_COLS), 0.2, cell_clearance)
 
     run(bundle, environment, args.manual, args.record)
 
