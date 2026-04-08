@@ -13,6 +13,8 @@ import math
 from typing import Tuple
 
 
+
+
 # based off of wikipedia article, particularly the pseudocode found here: https://en.wikipedia.org/wiki/A*_search_algorithm#Pseudocode
 
 def hybrid_astar(env: ObstacleEnvironment, bot: Bot, start: S, goal: S, config: LatticeConfig, prims: PrimitiveTable) -> list[S] | None:
@@ -22,6 +24,18 @@ def hybrid_astar(env: ObstacleEnvironment, bot: Bot, start: S, goal: S, config: 
         x1, y1, *_ = s1
         x2, y2, *_ = s2
         return math.hypot(x2 - x1, y2 - y1)
+    
+    def reconstruct_final_path(stop_state: S, origin_paths: dict[S, S]) -> list[S]:
+        path = []
+
+        previous_node = stop_state
+        while previous_node in came_from:
+            path.append(previous_node)
+            previous_node = came_from[previous_node]
+
+        path.append(previous_node)
+        path.reverse()
+        return path
 
     def path_is_valid(path: list[S]) -> bool:
         return all(
@@ -30,11 +44,11 @@ def hybrid_astar(env: ObstacleEnvironment, bot: Bot, start: S, goal: S, config: 
         )
 
 
-    open_set:  list[Tuple[float, int, S]]   = []
-    came_from: dict[S, S]                   = {}
-    g_score:   dict[S, float]               = {start: 0.0}
-    visited:   set[S]                       = set()
-    counter                                 = 0
+    open_set:  list[Tuple[float, int, S]]   = []            # priority queue of possible nodes to expand next
+    came_from: dict[S, S]                   = {}            # lets us reconstruct shortest path by knowing wh
+    g_score:   dict[S, float]               = {start: 0.0}  #
+    visited:   set[S]                       = set()         # set of visited nodes
+    counter                                 = 0             # tiebreaker if two nodes have the same priority, chooses the fist added to the queue
 
     heapq.heappush(open_set, (h(start, goal), counter, start))
     counter += 1 # increment after push
@@ -52,15 +66,10 @@ def hybrid_astar(env: ObstacleEnvironment, bot: Bot, start: S, goal: S, config: 
             # for now just reconstruct path to nearest lattice node
             # reconstruct path
             # TODO: make this use primitives instead of just the points
-            path = []
-            while current in came_from:
-                path.append(current)
-                current = came_from[current]
-            path.append(current)
-            path.reverse()
-            return path
 
+            return reconstruct_final_path(current, came_from)
 
+        # explore neighbors
         for prim in prims.get(current):
             endpoint = prim.endpoint
 
