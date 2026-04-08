@@ -1,14 +1,14 @@
 import simulator.config as cfg
 from simulator.recorder import MP4Recorder, NoOpRecorder
 from simulator.obstacle import ObstacleEnvironment
-from simulator.draw import draw_shape, draw_path
+from simulator.draw import render
 from simulator.utils import grid_to_coords
 from Bots.Bundle import BotBundle, make_bot
 from Bots.BotState import S
-from Bots.Bots import Bot
 from Planner.astar import hybrid_astar
 from Planner.LatticeConfig import LatticeConfig
 from Planner.primitives import PrimitiveTable
+
 
 import argparse
 import numpy as np
@@ -28,29 +28,6 @@ def init_pygame() -> tuple[pygame.Surface, pygame.Surface, pygame.time.Clock]:
     clock          = pygame.time.Clock()
     pygame.display.set_caption("Planner Sim")
     return next_frame, screen, clock
-
-def draw_frame(
-    surface: pygame.Surface,
-    bot: Bot,
-    state: S,
-    goal: S,
-    environment: ObstacleEnvironment,
-    path: list[S] | None = None,
-) -> None:
-    surface.fill(cfg.WHITE)
-    environment.draw_grid(surface)
-    if path:
-        draw_path(surface, path, cfg.GRAY)
-    draw_shape(surface, bot.footprint(goal), cfg.YELLOW, True, cfg.BLACK)
-    draw_shape(surface, bot.footprint(state), cfg.GREEN, True, cfg.BLACK)
-
-def render(screen: pygame.Surface, next_frame: pygame.Surface, bot: Bot, state: S, goal: S, env: ObstacleEnvironment, path: list[S] | None):
-    draw_frame(next_frame, bot, state, goal, env, path)
-    draw_to_screen(screen, next_frame)
-    pygame.display.flip()
-
-
-
 
 def run(
     bundle: BotBundle[S],
@@ -107,24 +84,7 @@ def run(
     recorder.save()
 
 
-def draw_to_screen(screen: pygame.Surface, virtual_screen: pygame.Surface):
-    # Preserving aspect ratio
-    window_width, window_height = screen.get_size()
-    scale = min(window_width / cfg.VIRTUAL_SIZE[0], window_height / cfg.VIRTUAL_SIZE[1])
 
-    # scaling the virtual surface to the actual screen size
-    scaled_surface = pygame.transform.smoothscale(
-        virtual_screen,
-        (int(cfg.VIRTUAL_SIZE[0] * scale), int(cfg.VIRTUAL_SIZE[1] * scale)),
-    )
-    # centering the screen
-    offset = (
-        (window_width - scaled_surface.get_width()) // 2,
-        (window_height - scaled_surface.get_height()) // 2,
-    )
-
-    screen.fill(cfg.BLACK)
-    screen.blit(scaled_surface, offset)
 
 
 def parse_args() -> argparse.Namespace:
@@ -157,29 +117,26 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
+    # starting states and number of cells to clear 
     match args.bot_type:
         case "point":
             startxy = grid_to_coords(0, 0)  
             goalxy  = grid_to_coords(cfg.NUM_ROWS - 1, cfg.NUM_COLS - 1)
             cell_clearance = 1
         case "diff":
-            startxy = grid_to_coords( .5, 0.5)  
+            startxy = grid_to_coords(0, 0)  
             goalxy  = grid_to_coords(cfg.NUM_ROWS - 1, cfg.NUM_COLS - 1)
             cell_clearance = 1
         case "car":
-            startxy = grid_to_coords( .5, 0.5)  
-            goalxy  = grid_to_coords(cfg.NUM_ROWS - 1, cfg.NUM_COLS - 1)
+            startxy = grid_to_coords( 0.5, 0)  
+            goalxy  = grid_to_coords(cfg.NUM_ROWS - 1.5, cfg.NUM_COLS - 1)
             cell_clearance = 2
         case "trailer":
-            startxy = grid_to_coords( .5, 0.5)  
-            goalxy  = grid_to_coords(cfg.NUM_ROWS - 1, cfg.NUM_COLS - 1)
-            cell_clearance = 3
+            startxy = grid_to_coords( 2, 0)  
+            goalxy  = grid_to_coords(cfg.NUM_ROWS - 2, cfg.NUM_COLS - 1)
+            cell_clearance = 4
         case _:
             raise ValueError(args.bot_type)
-
-    
-
-    # tuned by hand because I'm too lazy to come up with something smarter
 
 
     bundle = make_bot(args.bot_type, startxy, goalxy)

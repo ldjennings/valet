@@ -74,10 +74,10 @@ def populate_grid(grid_shape: tuple[int, int], probability: float) -> np.ndarray
 
 def clear_start_goal(grid: np.ndarray, clearance: int):
     # clearing space for start position
-    grid[0:2, 0:clearance] = 0
+    grid[:1, :clearance] = 0
 
     # clearing bottom right corner
-    grid[-2:, -clearance:] = 0
+    grid[-1:, -clearance:] = 0
 
 
 class ObstacleEnvironment:
