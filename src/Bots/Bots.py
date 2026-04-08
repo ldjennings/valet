@@ -1,4 +1,4 @@
-from planners.LatticeConfig import LatticeConfig
+from Planner.LatticeConfig import LatticeConfig
 import simulator.config as cfg
 from Bots.BotState import (
     S,
@@ -12,9 +12,8 @@ from Bots.BotState import (
 from Bots.geometry_helpers import point_geom, diff_geom, car_geom, truck_trailer_geom
 
 import math
-from typing import Protocol, Generic
+from typing import Protocol
 from shapely.geometry.base import BaseGeometry
-from dataclasses import dataclass
 import pygame
 
 # just a constant for now
@@ -36,10 +35,11 @@ class Bot(Protocol[S]):
         """Returns the robot's collision geometry at the given state as a Shapely object."""
         ...
 
-    def primitives(self, state: S, cfg: LatticeConfig) -> list[S]:
+    def generate_trajectory(self, start: S, goal: S) -> list[S] | None:
         """
-        Returns the list of reachable neighbor states from the given state,
-        based on the precomputed primitive table for this bot and lattice config.
+        Generates a kinematically correct trajectory from the start state to the
+        end state. Returns None if no feasible connection exists.
+        TODO: figure out if I actually need to worry about none points, should be feasible
         """
         ...
 
@@ -59,21 +59,15 @@ class Bot(Protocol[S]):
         """
         ...
 
-    def connect_to_goal(self, state: S, goal: S) -> list[S] | None:
-        """
-        Generates the terminal path segment from state to the exact goal,
-        bypassing the lattice for the final approach.
-        Returns None if no feasible connection exists within terminal radius.
-        # TODO: implement per-bot BVP solver for exact goal connection.
-        """
-        ...
-
     def handle_input(self, state: S, speed: float) -> S:
         """
         Applies keyboard input to produce the next state. Used in manual mode
         for debugging kinematics before trusting the planner.
         Kinematically correct — uses the same step() functions as primitive generation.
         """
+        ...
+
+    def make_state(self, x: float, y: float, h: float = 0, t:float = 0) -> S:
         ...
 
 
@@ -90,21 +84,19 @@ class PointBot:
     def footprint(self, state: PointState):
         return point_geom(state)
 
-    def primitives(self, state: PointState, cfg: LatticeConfig) -> list[PointState]:
-        return []
 
     def is_terminal(
         self, state: PointState, goal: PointState, cfg: LatticeConfig
     ) -> bool:
-        return False
+        return center_distance(state, goal) < 5.0
 
     def at_goal(self, state: PointState, goal: PointState) -> bool:
         return center_distance(state, goal) < cfg.goal_radius_tolerance
 
-    def connect_to_goal(
-        self, state: PointState, goal: PointState
+    def generate_trajectory(
+        self, start: PointState, goal: PointState
     ) -> list[PointState] | None:
-        return None
+        return [start, goal]
 
     def handle_input(self, state: PointState, speed: float) -> PointState:
         keymap = {
@@ -123,14 +115,14 @@ class PointBot:
                 new_state = new_state.translate(delta[0], delta[1])
 
         return new_state
+    
+    def make_state(self, x: float, y: float, h: float = 0, t:float = 0) -> PointState:
+        return PointState(x, y)
 
 
 class DiffBot:
     def footprint(self, state: DiffState):
         return diff_geom(state)
-
-    def primitives(self, state: DiffState, cfg: LatticeConfig) -> list[DiffState]:
-        return []
 
     def is_terminal(
         self, state: DiffState, goal: DiffState, cfg: LatticeConfig
@@ -144,8 +136,8 @@ class DiffBot:
             < cfg.goal_heading_tolerance
         )
 
-    def connect_to_goal(
-        self, state: DiffState, goal: DiffState
+    def generate_trajectory(
+        self, start: DiffState, goal: DiffState
     ) -> list[DiffState] | None:
         return None
 
@@ -162,16 +154,15 @@ class DiffBot:
         elif keys[pygame.K_RIGHT] and not keys[pygame.K_LEFT]:
             omega = speed
         return state.step(v, omega, DT)
-
+    
+    def make_state(self, x: float, y: float, h: float = 0, t:float = 0) -> DiffState:
+        return DiffState(x, y, h)
 
 class CarBot:
     MAX_STEER = math.radians(35)
 
     def footprint(self, state: CarState):
         return car_geom(state)
-
-    def primitives(self, state: CarState, cfg: LatticeConfig) -> list[CarState]:
-        return []
 
     def is_terminal(self, state: CarState, goal: CarState, cfg: LatticeConfig) -> bool:
         return False
@@ -183,7 +174,7 @@ class CarBot:
             < cfg.goal_heading_tolerance
         )
 
-    def connect_to_goal(self, state: CarState, goal: CarState) -> list[CarState] | None:
+    def generate_trajectory(self, start: CarState, goal: CarState) -> list[CarState] | None:
         return None
 
     def handle_input(self, state: CarState, speed: float) -> CarState:
@@ -201,6 +192,9 @@ class CarBot:
             delta = self.MAX_STEER
 
         return state.step(v, delta, cfg.CAR_WHEELBASE_METERS, DT)
+    
+    def make_state(self, x: float, y: float, h: float = 0, t:float = 0) -> CarState:
+        return CarState(x, y, h)
 
 
 class TrailerBot:
@@ -208,9 +202,6 @@ class TrailerBot:
 
     def footprint(self, state: TrailerState):
         return truck_trailer_geom(state)
-
-    def primitives(self, state: TrailerState, cfg: LatticeConfig) -> list[TrailerState]:
-        return []
 
     def is_terminal(
         self, state: TrailerState, goal: TrailerState, cfg: LatticeConfig
@@ -226,8 +217,8 @@ class TrailerBot:
             < cfg.trailer_heading_tolerance
         )
 
-    def connect_to_goal(
-        self, state: TrailerState, goal: TrailerState
+    def generate_trajectory(
+        self, start: TrailerState, goal: TrailerState
     ) -> list[TrailerState] | None:
         return None
 
@@ -251,3 +242,6 @@ class TrailerBot:
         # if abs(next_state.trailer_heading) > cfg.MAX_HITCH_ANGLE: # potential check for jacknifed trailer
         #     return state
         return next_state
+    
+    def make_state(self, x: float, y: float, h: float = 0, t:float = 0) -> TrailerState:
+        return TrailerState(x, y, h, t)

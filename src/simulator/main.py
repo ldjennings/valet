@@ -1,15 +1,20 @@
 import simulator.config as cfg
 from simulator.recorder import MP4Recorder, NoOpRecorder
 from simulator.obstacle import ObstacleEnvironment
-from simulator.draw import draw_shape
+from simulator.draw import draw_shape, draw_path
 from simulator.utils import grid_to_coords
 from Bots.Bundle import BotBundle, make_bot
 from Bots.BotState import S
 from Bots.Bots import Bot
+from Planner.astar import hybrid_astar
+from Planner.LatticeConfig import LatticeConfig
+from Planner.primitives import PrimitiveTable
 
 import argparse
 import numpy as np
 import pygame
+
+lat_conf = LatticeConfig(1)
 
 
 def surface_to_numpy(surface: pygame.Surface) -> np.ndarray:
@@ -30,18 +35,18 @@ def draw_frame(
     state: S,
     goal: S,
     environment: ObstacleEnvironment,
-    # path: list[S] | None = None,
+    path: list[S] | None = None,
 ) -> None:
     surface.fill(cfg.WHITE)
     environment.draw_grid(surface)
-    # if path:
-    #     draw_path(surface, path, cfg.LIGHT_GREEN)
+    if path:
+        draw_path(surface, path, cfg.GRAY)
     draw_shape(surface, bot.footprint(goal), cfg.YELLOW, True, cfg.BLACK)
     draw_shape(surface, bot.footprint(state), cfg.GREEN, True, cfg.BLACK)
 
 
 def run(
-    bundle: BotBundle,
+    bundle: BotBundle[S],
     environment: ObstacleEnvironment,
     manual: bool = False,
     record: bool = False,
@@ -53,15 +58,19 @@ def run(
     recorder = MP4Recorder() if record else NoOpRecorder()
     virtual_screen, screen, clock = init_pygame()
 
-    # # precompute before the loop
-    # path: list[S] | None = None
-    # path_index = 0
+    primitives = PrimitiveTable(bot, lat_conf)
 
-    # if not manual:
-    #     path = planner.plan(start, goal, environment)
-    #     if path is None:
-    #         print("No path found.")
-    #         return
+    # precompute before the loop
+    path: list[S] | None = None
+    path_index = 0
+
+    if not manual:
+        path = hybrid_astar(environment, bot, bundle.start, goal, lat_conf, primitives)
+        if path is None:
+            print("No path found.")
+            # instead of exiting, wait for user to close window before exiting
+            # this allows debugging
+            # return
 
     running = True
     while running:
@@ -74,17 +83,17 @@ def run(
             next_geom = bot.footprint(next_state)
             if environment.is_valid_state(next_geom):
                 state = next_state
-    # else:
-    #     # step along precomputed path at N states per frame
-    #     if path and path_index < len(path):
-    #         state = path[path_index]
-    #         path_index += 1
+        else:
+            # step along precomputed path at N states per frame
+            if path and path_index < len(path):
+                state = path[path_index]
+                path_index += 1
 
         if bot.at_goal(state, goal):
-            running = False
+            # running = False
             print("Goal state reached.")
 
-        draw_frame(virtual_screen, bot, state, goal, environment)
+        draw_frame(virtual_screen, bot, state, goal, environment, path)
         draw_to_screen(screen, virtual_screen)
         recorder.capture(screen)
 
