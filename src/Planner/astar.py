@@ -28,13 +28,26 @@ def hybrid_astar(env: ObstacleEnvironment, bot: Bot, start: S, goal: S, config: 
     def reconstruct_final_path(stop_state: S, origin_paths: dict[S, S]) -> list[S]:
         path = [goal]
 
+        current_node = path[0]
         previous_node = stop_state
         while previous_node in came_from:
-            path.append(previous_node)
+            traj = bot.generate_trajectory(previous_node, current_node)
+            
+            assert traj != None, "This should be guaranteed, if the primitives were correct"
+
+            traj.reverse()
+            path.extend(traj[1:])
+            current_node = previous_node
             previous_node = origin_paths[previous_node]
 
         path.append(previous_node)
         path.reverse()
+        print(len(path))
+
+        # DEBUG CODE
+        # for i in range(len(path) - 1):
+        #     assert path[i] != path[i+1], f"Duplicate adjacent states at index {i}: {path[i]}"
+
         return path
 
     def path_is_valid(path: list[S]) -> bool:

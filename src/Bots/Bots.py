@@ -15,6 +15,7 @@ import math
 from typing import Protocol
 from shapely.geometry.base import BaseGeometry
 import pygame
+import numpy as np
 
 # just a constant for now
 DT = 1 / 30
@@ -35,7 +36,7 @@ class Bot(Protocol[S]):
         """Returns the robot's collision geometry at the given state as a Shapely object."""
         ...
 
-    def generate_trajectory(self, start: S, goal: S) -> list[S] | None:
+    def generate_trajectory(self, start: S, goal: S, resolution: float = 0.1) -> list[S] | None:
         """
         Generates a kinematically correct trajectory from the start state to the
         end state. Returns None if no feasible connection exists.
@@ -94,9 +95,13 @@ class PointBot:
         return center_distance(state, goal) < cfg.goal_radius_tolerance
 
     def generate_trajectory(
-        self, start: PointState, goal: PointState
+        self, start: PointState, goal: PointState, resolution: float = 0.1
     ) -> list[PointState] | None:
-        return [start, goal]
+            dist = np.hypot(goal.x - start.x, goal.y - start.y)
+            n_points = max(2, int(np.ceil(dist / resolution)))
+            xs = np.linspace(start.x, goal.x, n_points)
+            ys = np.linspace(start.y, goal.y, n_points)
+            return [PointState(x, y) for x, y in zip(xs, ys)]
 
     def handle_input(self, state: PointState, speed: float) -> PointState:
         keymap = {
@@ -137,7 +142,7 @@ class DiffBot:
         )
 
     def generate_trajectory(
-        self, start: DiffState, goal: DiffState
+        self, start: DiffState, goal: DiffState, resolution: float = 0.1
     ) -> list[DiffState] | None:
         return None
 
@@ -174,7 +179,7 @@ class CarBot:
             < cfg.goal_heading_tolerance
         )
 
-    def generate_trajectory(self, start: CarState, goal: CarState) -> list[CarState] | None:
+    def generate_trajectory(self, start: CarState, goal: CarState, resolution: float = 0.1) -> list[CarState] | None:
         return None
 
     def handle_input(self, state: CarState, speed: float) -> CarState:
@@ -218,7 +223,7 @@ class TrailerBot:
         )
 
     def generate_trajectory(
-        self, start: TrailerState, goal: TrailerState
+        self, start: TrailerState, goal: TrailerState, resolution: float = 0.1
     ) -> list[TrailerState] | None:
         return None
 
