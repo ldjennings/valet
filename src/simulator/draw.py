@@ -52,11 +52,8 @@ def draw_path(surface: pygame.Surface, path: list[S], color):
     def extract_xy(state: S):
         x, y, *_ = state
         return (x,y)
-
-
+    
     coords = map(extract_xy, path)
-
-
     lines = linestring.LineString(coords)
 
     draw_shape(surface, lines, color, True)

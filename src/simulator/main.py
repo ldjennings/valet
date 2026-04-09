@@ -39,8 +39,8 @@ def run(
     # immediately draw to screen before waiting for input/path planning, makes debugging easier
     renderer.render(state)
 
-    ## Generating a kinematicly correct path ##
-    # bind variables outside of conditionals so that pylance doesnt yell at me
+    ## Generating a kinematically correct path ##
+    # bind variables outside of conditionals so pylance doesnt yell at me
     path: list[S] | None = None
     path_index = 0
 
@@ -61,7 +61,7 @@ def run(
             if event.type == pygame.QUIT:
                 running = False
 
-        recorder.capture(renderer.screen)
+        
 
         if manual: # manual mode, control robot with keyboard
             next_state = bot.handle_input(state, 3.0)
@@ -77,6 +77,7 @@ def run(
 
 
         renderer.render(state, path)
+        recorder.capture(renderer.screen)
         clock.tick(30)
 
     recorder.save()
@@ -88,6 +89,7 @@ def grid_to_coords(x_cell, y_cell, center=True) -> tuple[float, float]:
         y_cell += 0.5
 
     return (x_cell * cfg.CELLS_TO_METERS, y_cell * cfg.CELLS_TO_METERS) 
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(

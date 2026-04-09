@@ -73,7 +73,6 @@ class PrimitiveTable(Generic[S]):
                 for i in range(len(trajectory) - 1)
             )
 
-            # primitives.append(Primitive(trajectory=trajectory, cost=cost))
             primitives.append(Primitive(trajectory=trajectory, cost=cost))
 
 
