@@ -23,12 +23,15 @@
         packages = with pkgs; [
           python312
           python312Packages.pip
+          python312Packages.setuptools
           python312Packages.mypy
           python312Packages.ruff      # linter + formatter, replaces flake8/black/isort
+          boost
         ];
 
         shellHook = ''
           export LD_LIBRARY_PATH=$NIX_LD_LIBRARY_PATH
+          export CPLUS_INCLUDE_PATH="${pkgs.boost.dev}/include:$CPLUS_INCLUDE_PATH"
           if [ ! -d .venv ]; then
             python -m venv .venv
           fi

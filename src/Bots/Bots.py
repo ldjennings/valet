@@ -85,7 +85,6 @@ class PointBot:
     def footprint(self, state: PointState):
         return point_geom(state)
 
-
     def is_terminal(
         self, state: PointState, goal: PointState, cfg: LatticeConfig
     ) -> bool:

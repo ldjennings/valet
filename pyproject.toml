@@ -9,7 +9,8 @@
     "numpy~=2.3.3",
     "scipy~=1.16.2",
     "pygame~=2.6.1",
-    "shapely~=2.1.2"
+    "shapely~=2.1.2",
+    "cython"
 ]
  
 
@@ -19,3 +20,7 @@ runsim="simulator.main:main"
 # pyproject.toml
 [tool.mypy]
 python_executable = ".venv/bin/python"
+
+[build-system]
+requires = ["setuptools", "cython"]
+build-backend = "setuptools.build_meta"

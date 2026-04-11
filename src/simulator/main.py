@@ -4,9 +4,11 @@ from simulator.obstacle import ObstacleEnvironment
 from simulator.render import Renderer
 from Bots.Bundle import BotBundle, make_bot
 from Bots.BotState import S
-from Planner.astar import hybrid_astar
+from Planner.astar import lattice_astar
 from Planner.LatticeConfig import LatticeConfig
 from Planner.primitives import PrimitiveTable
+
+
 
 
 import argparse
@@ -50,7 +52,7 @@ def run(
         primitives = PrimitiveTable(bot, lat_conf)
         
         # do path planning
-        path = hybrid_astar(environment, bot, bundle.start, goal, lat_conf, primitives)
+        path = lattice_astar(environment, bot, bundle.start, goal, lat_conf, primitives)
         if path is None:
             print("No path found.")
 
@@ -146,7 +148,7 @@ def main() -> None:
 
 
     bundle = make_bot(args.bot_type, startxy, goalxy)
-    environment = ObstacleEnvironment((cfg.NUM_ROWS, cfg.NUM_COLS), 0.35, cell_clearance)
+    environment = ObstacleEnvironment((cfg.NUM_ROWS, cfg.NUM_COLS), 0.1, cell_clearance)
 
     run(bundle, environment, args.manual, args.record)
 
