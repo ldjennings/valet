@@ -1,0 +1,3 @@
+[submodule "deps/pyReedsShepp"]
+	path = deps/pyReedsShepp
+	url = https://github.com/liespace/pyReedsShepp
