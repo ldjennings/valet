@@ -72,12 +72,27 @@ def populate_grid(grid_shape: tuple[int, int], probability: float) -> np.ndarray
     return grid
 
 
-def clear_start_goal(grid: np.ndarray, clearance: int):
+regular_parking_spot = np.array([
+    [0, 0, 0, 0, 0, 0],
+    [1, 1, 0, 0, 1, 1]
+])
+trailer_parking_spot = np.array([
+    [0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 1, 1]
+])
+
+def clear_start_goal(grid: np.ndarray, is_trailer: bool = False):
+    clearance = 4 if is_trailer else 2
+    spot = trailer_parking_spot if is_trailer else regular_parking_spot
+    spot_h, spot_w = spot.shape
+
+    assert grid.shape[0] >= spot_h, "Grid too short"
+    assert grid.shape[1] >= max(clearance, spot_w), "Grid too narrow"
+
     # clearing space for start position
     grid[:1, :clearance] = 0
-
-    # clearing bottom right corner
-    grid[-1:, -clearance:] = 0
+    # stamping parking spot into bottom-right corner
+    grid[-spot_h:, -spot_w:] = spot
 
 
 class ObstacleEnvironment:
@@ -91,13 +106,13 @@ class ObstacleEnvironment:
     """
 
     def __init__(
-        self, grid_shape: tuple[int, int], proportion_filled: float, cells_to_clear: int
+        self, grid_shape: tuple[int, int], proportion_filled: float, trailer: bool
     ) -> None:
         self.grid: np.ndarray = populate_grid(grid_shape, proportion_filled)
 
         # robot_cell_length = int((robot_length // cfg.CELLS_TO_METERS) + 1)
 
-        clear_start_goal(self.grid, cells_to_clear)
+        clear_start_goal(self.grid, trailer)
 
         CELL_SIZE = cfg.CELLS_TO_METERS
         polys = []
@@ -114,7 +129,7 @@ class ObstacleEnvironment:
                         )
                     )
 
-        # TODO: convert to STRtree
+
         self.obstacles = STRtree(polys)
 
         x, y = grid_shape

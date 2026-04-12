@@ -126,29 +126,25 @@ def main() -> None:
     args = parse_args()
 
     # starting states and number of cells to clear on obstacle grid
-    match args.bot_type:
-        case "point":
-            startxy = grid_to_coords(0, 0)  
-            goalxy  = grid_to_coords(cfg.NUM_ROWS - 1, cfg.NUM_COLS - 1)
-            cell_clearance = 1
-        case "diff":
-            startxy = grid_to_coords(0, 0)  
-            goalxy  = grid_to_coords(cfg.NUM_ROWS - 1, cfg.NUM_COLS - 1)
-            cell_clearance = 1
-        case "car":
-            startxy = grid_to_coords(0.5, 0)  
-            goalxy  = grid_to_coords(cfg.NUM_ROWS - 1.5, cfg.NUM_COLS - 1)
-            cell_clearance = 2
-        case "trailer":
-            startxy = grid_to_coords(2, 0)  
-            goalxy  = grid_to_coords(cfg.NUM_ROWS - 2, cfg.NUM_COLS - 1)
-            cell_clearance = 4
-        case _:
-            raise ValueError(args.bot_type)
+    trailer = (args.bot_type == "trailer")
+
+    start_goal = {
+        "point":   ((0, 0),     (-3.5, -1)),
+        "diff":    ((0, 0),     (-3.5, -1)),
+        "car":     ((0.5, 0),   (-3.55, -1)),
+        "trailer": ((2, 0),     (-4, -1)),
+    }
+
+    if args.bot_type not in start_goal:
+        raise ValueError(args.bot_type)
+
+    (sr, sc), (gr, gc) = start_goal[args.bot_type]
+    startxy = grid_to_coords(sr, sc)
+    goalxy  = grid_to_coords(cfg.NUM_ROWS + gr, cfg.NUM_COLS + gc)
 
 
     bundle = make_bot(args.bot_type, startxy, goalxy)
-    environment = ObstacleEnvironment((cfg.NUM_ROWS, cfg.NUM_COLS), 0.1, cell_clearance)
+    environment = ObstacleEnvironment((cfg.NUM_ROWS, cfg.NUM_COLS), 0.1, trailer)
 
     run(bundle, environment, args.manual, args.record)
 

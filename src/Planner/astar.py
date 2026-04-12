@@ -103,7 +103,7 @@ def lattice_astar(env: ObstacleEnvironment, bot: Bot, start: S, goal: S, config:
 
 
 
-def hybrid_astar(env: ObstacleEnvironment, bot: Bot, start: S, goal: S) -> list[S] | None:
+# def hybrid_astar(env: ObstacleEnvironment, bot: Bot, start: S, goal: S) -> list[S] | None:
     # Just doing euclidean distance, not considering heading at all. Works for every bot and is compliant
     #  with A* restrictions
     def h(s1: S, s2: S) -> float:
