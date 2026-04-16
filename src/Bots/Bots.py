@@ -7,8 +7,8 @@ type from BotState and implements footprint generation, goal checking, trajector
 generation, and keyboard input handling.
 """
 
-from Planner.AstarConfig import LatticeConfig
 import simulator.config as cfg
+import reeds_shepp
 from Bots.BotState import (
     S,
     PointState,
@@ -55,11 +55,19 @@ class Bot(Protocol[S]):
         """
         ...
 
-    def is_terminal(self, state: S, goal: S, cfg: LatticeConfig) -> bool:
+    def is_terminal(self, state: S, goal: S) -> bool:
         """
         Returns True if state is close enough to goal to fire the terminal
-        connection. Checks position for all bots, plus heading for diff/car/trailer,
-        plus hitch angle for trailer.
+        connection (positional check only — heading is handled by generate_trajectory).
+        Each bot sets its own terminal_radius based on kinematic constraints.
+        """
+        ...
+
+    def heuristic(self, state: S, goal: S) -> float:
+        """
+        Admissible cost-to-go estimate from state to goal.
+        Non-holonomic bots use a Reeds-Shepp path length (ignoring obstacles);
+        holonomic bots use Euclidean distance.
         """
         ...
 
@@ -91,13 +99,16 @@ class Bot(Protocol[S]):
 class PointBot:
     """Holonomic point robot. Can move in any direction; no heading or turning constraints."""
 
+    TERMINAL_RADIUS = 1.0
+
     def footprint(self, state: PointState):
         return point_geom(state)
 
-    def is_terminal(
-        self, state: PointState, goal: PointState, cfg: LatticeConfig
-    ) -> bool:
-        return center_distance(state, goal) < 1.0
+    def is_terminal(self, state: PointState, goal: PointState) -> bool:
+        return center_distance(state, goal) < self.TERMINAL_RADIUS
+
+    def heuristic(self, state: PointState, goal: PointState) -> float:
+        return math.hypot(goal.x - state.x, goal.y - state.y)
 
     def at_goal(self, state: PointState, goal: PointState) -> bool:
         return center_distance(state, goal) < cfg.goal_radius_tolerance
@@ -136,13 +147,16 @@ class PointBot:
 class DiffBot:
     """Differential drive robot. Can rotate in place; forward/backward and in-place turning."""
 
+    TERMINAL_RADIUS = 2.0
+
     def footprint(self, state: DiffState):
         return diff_geom(state)
 
-    def is_terminal(
-        self, state: DiffState, goal: DiffState, cfg: LatticeConfig
-    ) -> bool:
-        return False
+    def is_terminal(self, state: DiffState, goal: DiffState) -> bool:
+        return center_distance(state, goal) < self.TERMINAL_RADIUS
+
+    def heuristic(self, state: DiffState, goal: DiffState) -> float:
+        return math.hypot(goal.center_x - state.center_x, goal.center_y - state.center_y)
 
     def at_goal(self, state: DiffState, goal: DiffState) -> bool:
         return (
@@ -176,13 +190,20 @@ class DiffBot:
 class CarBot:
     """Ackermann steering (car-like) robot. Non-holonomic; minimum turning radius determined by MAX_STEER."""
 
-    MAX_STEER = math.radians(35)
+    MAX_STEER      = math.radians(35)
+    TURNING_RADIUS = cfg.CAR_WHEELBASE_METERS / math.tan(math.radians(35))
+    TERMINAL_RADIUS = 10.0
 
     def footprint(self, state: CarState):
         return car_geom(state)
 
-    def is_terminal(self, state: CarState, goal: CarState, cfg: LatticeConfig) -> bool:
-        return False
+    def is_terminal(self, state: CarState, goal: CarState) -> bool:
+        return center_distance(state, goal) < self.TERMINAL_RADIUS
+
+    def heuristic(self, state: CarState, goal: CarState) -> float:
+        q0 = (state.rear_axle_x, state.rear_axle_y, state.heading_rad)
+        q1 = (goal.rear_axle_x,  goal.rear_axle_y,  goal.heading_rad)
+        return reeds_shepp.path_length(q0, q1, self.TURNING_RADIUS)
 
     def at_goal(self, state: CarState, goal: CarState) -> bool:
         return (
@@ -221,15 +242,21 @@ class TrailerBot:
     to be within tolerance.
     """
 
-    MAX_STEER = math.radians(35)
+    MAX_STEER       = math.radians(35)
+    TURNING_RADIUS  = cfg.TRUCK_WHEELBASE_METERS / math.tan(math.radians(35))
+    TERMINAL_RADIUS = 15.0
 
     def footprint(self, state: TrailerState):
         return truck_trailer_geom(state)
 
-    def is_terminal(
-        self, state: TrailerState, goal: TrailerState, cfg: LatticeConfig
-    ) -> bool:
-        return False
+    def is_terminal(self, state: TrailerState, goal: TrailerState) -> bool:
+        return center_distance(state, goal) < self.TERMINAL_RADIUS
+
+    def heuristic(self, state: TrailerState, goal: TrailerState) -> float:
+        # RS on the truck state only — trailer heading is handled by generate_trajectory
+        q0 = (state.rear_axle_x, state.rear_axle_y, state.heading_rad)
+        q1 = (goal.rear_axle_x,  goal.rear_axle_y,  goal.heading_rad)
+        return reeds_shepp.path_length(q0, q1, self.TURNING_RADIUS)
 
     def at_goal(self, state: TrailerState, goal: TrailerState) -> bool:
         return (

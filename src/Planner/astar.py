@@ -1,16 +1,12 @@
 # from Bots.BotState import BotState
-from shapely.geometry.base import BaseGeometry
 from environment.obstacle import ObstacleEnvironment
-from Bots import S, Bot
-from Planner.primitives import PrimitiveTable, Primitive
+from Bots import S, Bot, TrailerBot
+from Planner.primitives import PrimitiveTable
 from .AstarConfig import LatticeConfig, HybridConfig
-import numpy as np
 import heapq
 from dataclasses import dataclass, field
 from typing import Generic
-import math
-
-from typing import Tuple, TypeAlias
+from typing import TypeAlias
 
 NodeKey: TypeAlias = tuple[int, ...]
 
@@ -34,7 +30,8 @@ def reconstruct_path(node: SearchNode[S], final_path: list[S] = []) -> list[S]:
         # unless at root node, all the paths will overlap at the end, so need this check
         path.extend(arc if len(path) == 0 else arc[1:])
 
-    # if we have a final path afterwards (usually one-shot closed-form trajectory), add that onto the end
+    # if we have a final path afterwards (usually from one-shot closed-form trajectory),
+    # add that onto the end
     path.extend(final_path)
 
     return path
@@ -78,13 +75,6 @@ def lattice_astar(
         prims: PrimitiveTable
     ) -> list[S] | None:
 
-    # Just doing euclidean distance, not considering heading at all. Works for every bot and is compliant
-    #  with A* restrictions
-    def h(s1: S, s2: S) -> float:
-        x1, y1, *_ = s1
-        x2, y2, *_ = s2
-        return math.hypot(x2 - x1, y2 - y1)
-
     LOG_INTERVAL = 500  # print a status line every N expansions
 
     x0, y0, *_ = start
@@ -98,7 +88,7 @@ def lattice_astar(
     visited:    set[NodeKey]            = set()
 
     heapq.heappush(open_set, SearchNode(
-        f_cost = h(start, goal),
+        f_cost = bot.heuristic(start, goal),
         g_cost = g_score[start_key],
         state  = start,
     ))
@@ -119,17 +109,19 @@ def lattice_astar(
             print(f"[lattice_astar] expanded {len(visited):5d} nodes | "
                 f"open = {len(open_set):5d} | "
                 f"g = {node.g_cost:.2f} | "
-                f"h = {h(current, goal):.2f} | "
+                f"h = {bot.heuristic(current, goal):.2f} | "
                 f"pos = ({x:.2f}, {y:.2f})")
 
-        if bot.is_terminal(current, goal, config):
+        if bot.is_terminal(current, goal):
             attempted_path = bot.generate_trajectory(current, goal)
 
             if attempted_path is not None and validate_path(env, bot, attempted_path):
                 print(f"[lattice_astar] found path: {len(visited)} expansions, "
                     f"{len(reconstruct_path(node, attempted_path))} states")
 
-                return reconstruct_path(node, attempted_path)
+                initial_path = reconstruct_path(node, attempted_path)
+
+                return smooth_path(initial_path, bot, env)
 
         # explore neighbors
         for prim in prims.get(current):
@@ -143,7 +135,7 @@ def lattice_astar(
 
             if tentative_g < g_score.get(endpoint_key, float("inf")):
                 g_score[endpoint_key]   = tentative_g
-                f                   = tentative_g + h(endpoint, goal)
+                f                       = tentative_g + bot.heuristic(endpoint, goal)
                 heapq.heappush(open_set, SearchNode(
                     f_cost      = f,
                     g_cost      = tentative_g,
@@ -165,13 +157,6 @@ def hybrid_astar(
         goal: S,
         config: HybridConfig,
     ) -> list[S] | None:
-    
-    # Just doing euclidean distance, not considering heading at all. Works for every bot and is compliant
-    #  with A* restrictions
-    def h(s1: S, s2: S) -> float:
-        x1, y1, *_ = s1
-        x2, y2, *_ = s2
-        return math.hypot(x2 - x1, y2 - y1)
 
     LOG_INTERVAL = 500  # print a status line every N expansions
 
@@ -179,14 +164,14 @@ def hybrid_astar(
     xg, yg, *_ = goal
     print(f"[hybrid_astar] searching from ({x0:.2f}, {y0:.2f}) to ({xg:.2f}, {yg:.2f})")
 
-    start_key = discretize(start, config.spacing, config.angular_spacing, config.angular_spacing)
+    start_key = discretize(start, config.xy_spacing, config.angular_spacing, config.angular_spacing)
 
     open_set:   list[SearchNode[S]]     = []
     g_score:    dict[NodeKey, float]    = {start_key: 0.0}
     visited:    set[NodeKey]            = set()
 
     heapq.heappush(open_set, SearchNode(
-        f_cost = h(start, goal),
+        f_cost = bot.heuristic(start, goal),
         g_cost = g_score[start_key],
         state  = start,
     ))
@@ -197,7 +182,7 @@ def hybrid_astar(
         node = heapq.heappop(open_set)
         current = node.state
 
-        current_key = discretize(current, config.spacing, config.angular_spacing, config.angular_spacing)
+        current_key = discretize(current, config.xy_spacing, config.angular_spacing, config.angular_spacing)
         if current_key in visited:
             continue
         visited.add(current_key)
@@ -207,10 +192,10 @@ def hybrid_astar(
             print(f"[hybrid_astar] expanded {len(visited):5d} nodes | "
                 f"open = {len(open_set):5d} | "
                 f"g = {node.g_cost:.2f} | "
-                f"h = {h(current, goal):.2f} | "
+                f"h = {bot.heuristic(current, goal):.2f} | "
                 f"pos = ({x:.2f}, {y:.2f})")
 
-        if bot.is_terminal(current, goal, config):
+        if bot.is_terminal(current, goal):
             attempted_path = bot.generate_trajectory(current, goal)
 
             if attempted_path is not None and validate_path(env, bot, attempted_path):
@@ -222,7 +207,7 @@ def hybrid_astar(
         # explore neighbors
         for prim in prims.get(current):
             endpoint = prim.endpoint
-            endpoint_key = discretize(endpoint, config.spacing, config.angular_spacing, config.angular_spacing)
+            endpoint_key = discretize(endpoint, config.xy_spacing, config.angular_spacing, config.angular_spacing)
 
             if not validate_path(env, bot, prim.trajectory):
                 continue
@@ -231,7 +216,7 @@ def hybrid_astar(
 
             if tentative_g < g_score.get(endpoint_key, float("inf")):
                 g_score[endpoint_key]   = tentative_g
-                f                   = tentative_g + h(endpoint, goal)
+                f                       = tentative_g + bot.heuristic(endpoint, goal)
                 heapq.heappush(open_set, SearchNode(
                     f_cost      = f,
                     g_cost      = tentative_g,
@@ -243,3 +228,45 @@ def hybrid_astar(
     print(f"[hybrid_astar] no path found after {len(visited)} expansions")
 
     return None
+
+
+def smooth_path(
+        path: list[S],
+        bot: Bot,
+        obstacles: ObstacleEnvironment,
+        iterations: int = 100,
+    ) -> list[S]:
+    """
+    Probabilistic path shortcutting. Repeatedly picks two random indices, attempts
+    a direct connection via bot.generate_trajectory, and replaces the span if the
+    shortcut is collision-free. Skipped entirely for TrailerBot since
+    generate_trajectory ignores the trailer heading.
+    """
+    if isinstance(bot, TrailerBot):
+        return path
+
+    import random
+    path = list(path)
+    initial_len = len(path)
+    shortcuts_applied = 0
+
+    for i in range(iterations):
+        if len(path) < 3:
+            print(f"[smooth_path] path too short to shorten further, stopping at iteration {i}")
+            break
+
+        a = random.randint(0, len(path) - 2)
+        b = random.randint(a + 1, len(path) - 1)
+
+        shortcut = bot.generate_trajectory(path[a], path[b])
+        if shortcut is None:
+            continue
+
+        if validate_path(obstacles, bot, shortcut):
+            path = path[:a] + shortcut + path[b + 1:]
+            shortcuts_applied += 1
+
+    print(f"[smooth_path] {iterations} iterations | {shortcuts_applied} shortcuts applied | "
+          f"{initial_len} -> {len(path)} states")
+
+    return path
