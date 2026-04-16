@@ -5,7 +5,7 @@ from Bots.BotState import S
 from shapely.geometry import linestring
 import numpy as np
 import simulator.config as cfg
-from environment.obstacle import ObstacleEnvironment
+from environment import ObstacleEnvironment
 
 def scale(points, scale=cfg.METERS_TO_PIXELS):
     return (np.array(points) * scale).tolist()

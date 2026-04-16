@@ -1,6 +1,6 @@
 import simulator.config as cfg
 from simulator.recorder import MP4Recorder, NoOpRecorder
-from environment.obstacle import ObstacleEnvironment
+from environment import ObstacleEnvironment
 from simulator.render import Renderer
 from Bots.Bundle import BotBundle, make_bot
 from Bots.BotState import S
