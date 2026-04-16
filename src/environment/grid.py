@@ -43,6 +43,9 @@ def populate_grid(grid_shape: tuple[int, int], probability: float) -> np.ndarray
         grid_shape: (num_rows, num_cols) of the grid.
         probability: Target fraction of cells to fill, in [0, 1].
     """
+
+    assert 0 <= probability <= 1.0, "probability not valid, must be in [0, 1]"
+    
     num_rows, num_cols = grid_shape
 
     grid = np.zeros((num_rows, num_cols), dtype=int)

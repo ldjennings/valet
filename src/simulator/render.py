@@ -1,7 +1,6 @@
 from typing import Generic
 import simulator.config as cfg
-from Bots.Bots import Bot
-from Bots.BotState import S
+from Bots import Bot, S
 from environment.obstacle import ObstacleEnvironment
 from simulator.draw import draw_grid, draw_path, draw_shape
 

@@ -1,7 +1,7 @@
 import pygame
 import pygame.gfxdraw
 
-from Bots.BotState import S
+from Bots import S
 from shapely.geometry import linestring
 import numpy as np
 import simulator.config as cfg

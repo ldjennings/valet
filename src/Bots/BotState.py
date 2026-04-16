@@ -14,7 +14,9 @@ import math
 class PointState:
     """
     State for a point robot: just a 2D position.
-    No heading — the robot is a dimensionless point that can move in any direction.
+
+    No heading as the robot is a dimensionless point that can move in any direction.
+
     x/y are world-space coordinates in meters.
     """
 
@@ -33,8 +35,10 @@ class PointState:
 class DiffState:
     """
     State for a differential drive robot: position + heading.
+
     x/y is the center of the wheel axle (geometric center of the robot body).
     heading_rad is the direction the robot faces in world space (radians).
+
     Diff drive can rotate in place, so heading and velocity are independent.
     """
 
@@ -59,8 +63,10 @@ class DiffState:
 class CarState:
     """
     State for a car-like (Ackermann steering) robot: position + heading.
-    x/y is the center of the rear axle — this is the standard kinematic
-    reference point for car models (Reeds-Shepp, Dubins, bicycle model).
+
+    x/y is the center of the rear axle,  standard kinematic reference 
+    point for car models (Reeds-Shepp, Dubins, bicycle model).
+
     The car cannot rotate in place; turning radius is bounded by max steering angle.
     """
 

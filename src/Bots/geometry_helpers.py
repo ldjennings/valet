@@ -19,23 +19,7 @@ def make_rect_geom(
     return positioned
 
 
-def diff_drive_geom(
-    axle_center_x: float,
-    axle_center_y: float,
-    angle_rad: float,
-    wheelbase: float,
-    length: float,
-    width: float,
-) -> BaseGeometry:
-    rect = box(-length / 2, -width / 2, length / 2, width / 2)
 
-    rear_overhang = length - wheelbase
-    offset = (length / 2) - rear_overhang
-    rect = translate(rect, xoff=offset)
-
-    rect = rotate(rect, math.degrees(angle_rad), origin=(0, 0))
-    rect = translate(rect, xoff=axle_center_x, yoff=axle_center_y)
-    return rect
 
 
 def point_geom(state: PointState) -> BaseGeometry:
@@ -50,10 +34,31 @@ def diff_geom(state: DiffState) -> BaseGeometry:
     )
 
 
+def ackermann_car_geom(
+        axle_center_x: float,
+        axle_center_y: float,
+        angle_rad: float,
+        wheelbase: float,
+        length: float,
+        width: float,
+    ) -> BaseGeometry:
+
+    # making base rectangle centered at the origin
+    rect = box(-length / 2, -width / 2, length / 2, width / 2)
+
+    # calculating offset to place rear axle center at the origin
+    rear_overhang = length - wheelbase
+    offset = (length / 2) - rear_overhang
+    rect = translate(rect, xoff=offset)
+
+    # rotating/translating to final world position
+    rect = rotate(rect, math.degrees(angle_rad), origin=(0, 0))
+    rect = translate(rect, xoff=axle_center_x, yoff=axle_center_y)
+    return rect
+
 def car_geom(state: CarState) -> BaseGeometry:
     x, y, heading_rad = state
-    # return make_rect_geom(x, y, heading_rad, cfg.CAR_LENGTH_METERS, cfg.CAR_WIDTH_METERS)
-    return diff_drive_geom(
+    return ackermann_car_geom(
         x,
         y,
         heading_rad,
@@ -67,15 +72,10 @@ def truck_geom(x: float, y: float, heading_rad: float) -> BaseGeometry:
     TRUCK_LEN = cfg.TRUCK_LENGTH_METERS
     TRUCK_WID = cfg.TRUCK_WIDTH_METERS
     WHEELBASE = cfg.TRUCK_WHEELBASE_METERS
-    return diff_drive_geom(x, y, heading_rad, WHEELBASE, TRUCK_LEN, TRUCK_WID)
+    return ackermann_car_geom(x, y, heading_rad, WHEELBASE, TRUCK_LEN, TRUCK_WID)
 
 
 def truck_trailer_geom(state: TrailerState) -> BaseGeometry:
-    """
-    Returns a Shapely geometry (truck + trailer + connection)
-    given truck rear-axle center (x, y), truck heading theta, and trailer angle phi.
-    The trailer is attached directly at the truck's rear axle.
-    """
 
     x, y, truck_heading_rad, trailer_heading_rad = state
 

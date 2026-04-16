@@ -1,8 +1,7 @@
 # from Bots.BotState import BotState
 from shapely.geometry.base import BaseGeometry
 from environment.obstacle import ObstacleEnvironment
-from Bots.BotState import S
-from Bots.Bots import Bot
+from Bots import S, Bot
 from Planner.primitives import PrimitiveTable, Primitive
 from .LatticeConfig import LatticeConfig
 import numpy as np

@@ -2,8 +2,7 @@ import simulator.config as cfg
 from simulator.recorder import MP4Recorder, NoOpRecorder
 from environment import ObstacleEnvironment
 from simulator.render import Renderer
-from Bots.Bundle import BotBundle, make_bot
-from Bots.BotState import S
+from Bots import BotBundle, make_bot, S
 from Planner.astar import lattice_astar
 from Planner.LatticeConfig import LatticeConfig
 from Planner.primitives import PrimitiveTable
@@ -15,7 +14,7 @@ from Planner.primitives import PrimitiveTable
 import argparse
 import pygame
 
-lat_conf = LatticeConfig(.25)
+
 
 
 def init_pygame(bundle: BotBundle, env: ObstacleEnvironment) -> tuple[Renderer, pygame.time.Clock]:
@@ -31,6 +30,7 @@ def run(
     environment: ObstacleEnvironment,
     manual: bool = False,
     record: bool = False,
+    lattice_config: LatticeConfig = LatticeConfig(.25)
 ):
     ## Initializing Variables ##
     recorder        = MP4Recorder() if record else NoOpRecorder()   # screen recorder, no-ops unless render is true
@@ -50,10 +50,10 @@ def run(
     # calculate path planning before loop
     if not manual:
         # generate navigation primitives
-        primitives = PrimitiveTable(bot, lat_conf)
+        primitives = PrimitiveTable(bot, lattice_config)
         
         # do path planning
-        path = lattice_astar(environment, bot, bundle.start, goal, lat_conf, primitives)
+        path = lattice_astar(environment, bot, bundle.start, goal, lattice_config, primitives)
         if path is None:
             print("No path found.")
 

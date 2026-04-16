@@ -1,7 +1,6 @@
-from Bots.BotState import S, PointState
+from Bots import S, PointState, Bot, PointBot
 from typing import Generic, Iterator
 from dataclasses import dataclass
-from Bots.Bots import Bot, PointBot
 import itertools
 from Planner.LatticeConfig import LatticeConfig
 import math

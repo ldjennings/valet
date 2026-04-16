@@ -72,15 +72,6 @@ class Bot(Protocol[S]):
         ...
 
 
-def check_collision(bot: Bot, state: S, obstacle: BaseGeometry) -> bool:
-    """
-    Returns True if the bot's footprint at the given state intersects the obstacle geometry.
-    Defined as a free function rather than a protocol method because the implementation
-    is identical for all bots.
-    """
-    return bot.footprint(state).intersects(obstacle)
-
-
 class PointBot:
     def footprint(self, state: PointState):
         return point_geom(state)
