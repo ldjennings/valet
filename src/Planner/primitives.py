@@ -2,7 +2,7 @@ from Bots import S, PointState, Bot, PointBot
 from typing import Generic, Iterator
 from dataclasses import dataclass
 import itertools
-from Planner.LatticeConfig import LatticeConfig
+from Planner.AstarConfig import LatticeConfig
 import math
 
 
@@ -18,7 +18,7 @@ class Primitive(Generic[S]):
     @property
     def endpoint(self) -> S:
         return self.trajectory[-1]
-    
+
 
     def __lt__(self, other: "Primitive") -> bool:
         return self.cost < other.cost
@@ -101,5 +101,3 @@ class PrimitiveTable(Generic[S]):
         """
         x, y, *rest = s
         return type(s)(x + dx, y + dy, *rest)
-
-

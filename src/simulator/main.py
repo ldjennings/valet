@@ -4,7 +4,7 @@ from environment import ObstacleEnvironment
 from simulator.render import Renderer
 from Bots import BotBundle, make_bot, S
 from Planner.astar import lattice_astar
-from Planner.LatticeConfig import LatticeConfig
+from Planner.AstarConfig import LatticeConfig
 from Planner.primitives import PrimitiveTable
 
 
@@ -22,7 +22,7 @@ def init_pygame(bundle: BotBundle, env: ObstacleEnvironment) -> tuple[Renderer, 
 
     renderer = Renderer(bundle.bot, bundle.goal, env)
     clock    = pygame.time.Clock()
-    
+
     return renderer, clock
 
 def run(
@@ -51,7 +51,7 @@ def run(
     if not manual:
         # generate navigation primitives
         primitives = PrimitiveTable(bot, lattice_config)
-        
+
         # do path planning
         path = lattice_astar(environment, bot, bundle.start, goal, lattice_config, primitives)
         if path is None:
@@ -64,7 +64,7 @@ def run(
             if event.type == pygame.QUIT:
                 running = False
 
-        
+
 
         if manual: # manual mode, control robot with keyboard
             next_state = bot.handle_input(state, 3.0)
@@ -85,13 +85,13 @@ def run(
 
     recorder.save()
 
-# helper method for initial positions 
+# helper method for initial positions
 def grid_to_coords(x_cell, y_cell, center=True) -> tuple[float, float]:
     if center:
         x_cell += 0.5
         y_cell += 0.5
 
-    return (x_cell * cfg.CELLS_TO_METERS, y_cell * cfg.CELLS_TO_METERS) 
+    return (x_cell * cfg.CELLS_TO_METERS, y_cell * cfg.CELLS_TO_METERS)
 
 
 def parse_args() -> argparse.Namespace:

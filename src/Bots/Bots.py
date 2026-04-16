@@ -7,7 +7,7 @@ type from BotState and implements footprint generation, goal checking, trajector
 generation, and keyboard input handling.
 """
 
-from Planner.LatticeConfig import LatticeConfig
+from Planner.AstarConfig import LatticeConfig
 import simulator.config as cfg
 from Bots.BotState import (
     S,
@@ -128,7 +128,7 @@ class PointBot:
                 new_state = new_state.translate(delta[0], delta[1])
 
         return new_state
-    
+
     def make_state(self, x: float, y: float, h: float = 0, t:float = 0) -> PointState:
         return PointState(x, y)
 
@@ -169,7 +169,7 @@ class DiffBot:
         elif keys[pygame.K_RIGHT] and not keys[pygame.K_LEFT]:
             omega = speed
         return state.step(v, omega, DT)
-    
+
     def make_state(self, x: float, y: float, h: float = 0, t:float = 0) -> DiffState:
         return DiffState(x, y, h)
 
@@ -209,7 +209,7 @@ class CarBot:
             delta = self.MAX_STEER
 
         return state.step(v, delta, cfg.CAR_WHEELBASE_METERS, DT)
-    
+
     def make_state(self, x: float, y: float, h: float = 0, t:float = 0) -> CarState:
         return CarState(x, y, h)
 
@@ -265,6 +265,6 @@ class TrailerBot:
         # if abs(next_state.trailer_heading) > cfg.MAX_HITCH_ANGLE: # potential check for jacknifed trailer
         #     return state
         return next_state
-    
+
     def make_state(self, x: float, y: float, h: float = 0, t:float = 0) -> TrailerState:
         return TrailerState(x, y, h, t)
