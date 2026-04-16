@@ -2,7 +2,7 @@ from Bots import S, PointState, Bot, PointBot
 from typing import Generic, Iterator
 from dataclasses import dataclass
 import itertools
-from Planner.AstarConfig import LatticeConfig
+from Planner.AstarConfig import GridConfig
 import math
 
 
@@ -27,7 +27,7 @@ class Primitive(Generic[S]):
 
 class PrimitiveTable(Generic[S]):
 
-    def __init__(self, bot: Bot[S], cfg: LatticeConfig):
+    def __init__(self, bot: Bot[S], cfg: GridConfig):
         """
         For each discretized heading, attempt to connect to all neighbor offsets
         at all target headings via bot.trajectory().

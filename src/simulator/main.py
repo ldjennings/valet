@@ -4,7 +4,7 @@ from environment import ObstacleEnvironment
 from simulator.render import Renderer
 from Bots import BotBundle, make_bot, S
 from Planner.astar import lattice_astar
-from Planner.AstarConfig import LatticeConfig
+from Planner.AstarConfig import GridConfig
 from Planner.primitives import PrimitiveTable
 
 
@@ -30,7 +30,7 @@ def run(
     environment: ObstacleEnvironment,
     manual: bool = False,
     record: bool = False,
-    lattice_config: LatticeConfig = LatticeConfig(.25)
+    lattice_config: GridConfig = GridConfig()
 ):
     ## Initializing Variables ##
     recorder        = MP4Recorder() if record else NoOpRecorder()   # screen recorder, no-ops unless render is true

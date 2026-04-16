@@ -2,7 +2,7 @@
 from environment.obstacle import ObstacleEnvironment
 from Bots import S, Bot, TrailerBot
 from Planner.primitives import PrimitiveTable
-from .AstarConfig import LatticeConfig, HybridConfig
+from .AstarConfig import GridConfig, HybridConfig
 import heapq
 from dataclasses import dataclass, field
 from typing import Generic
@@ -43,21 +43,16 @@ def validate_path(obstacles: ObstacleEnvironment, bot: Bot, path: list[S]) -> bo
         for s in path
     )
 
-def discretize(
-        state: S,
-        position_resolution: float,
-        heading_resolution: float | None,
-        trailer_resolution: float | None
-    ) -> NodeKey:
-
+def discretize(state: S, config: GridConfig) -> NodeKey:
     x, y, *rest = state
-    key: NodeKey = (round(x / position_resolution), round(y / position_resolution))
+    key: NodeKey = (round(x / config.spacing), round(y / config.spacing))
 
-    if rest and heading_resolution is not None:
-        key += (round(rest[0] / heading_resolution),)
+    if rest:
+        key += (round(rest[0] / config.angular_spacing),)
 
-    if len(rest) > 1 and trailer_resolution is not None:
-        key += (round(rest[1] / trailer_resolution),)
+    if len(rest) > 1:
+        trailer_res = config.trailer_spacing if config.trailer_spacing is not None else config.angular_spacing
+        key += (round(rest[1] / trailer_res),)
 
     return key
 
@@ -71,7 +66,7 @@ def lattice_astar(
         bot: Bot,
         start: S,
         goal: S,
-        config: LatticeConfig,
+        config: GridConfig,
         prims: PrimitiveTable
     ) -> list[S] | None:
 
@@ -81,7 +76,7 @@ def lattice_astar(
     xg, yg, *_ = goal
     print(f"[lattice_astar] searching from ({x0:.2f}, {y0:.2f}) to ({xg:.2f}, {yg:.2f})")
 
-    start_key = discretize(start, config.spacing, config.angular_spacing, config.angular_spacing)
+    start_key = discretize(start, config)
 
     open_set:   list[SearchNode[S]]     = []
     g_score:    dict[NodeKey, float]    = {start_key: 0.0}
@@ -99,7 +94,7 @@ def lattice_astar(
         node = heapq.heappop(open_set)
         current = node.state
 
-        current_key = discretize(current, config.spacing, config.angular_spacing, config.angular_spacing)
+        current_key = discretize(current, config)
         if current_key in visited:
             continue
         visited.add(current_key)
@@ -126,7 +121,7 @@ def lattice_astar(
         # explore neighbors
         for prim in prims.get(current):
             endpoint = prim.endpoint
-            endpoint_key = discretize(endpoint, config.spacing, config.angular_spacing, config.angular_spacing)
+            endpoint_key = discretize(endpoint, config)
 
             if not validate_path(env, bot, prim.trajectory):
                 continue
@@ -164,7 +159,7 @@ def hybrid_astar(
     xg, yg, *_ = goal
     print(f"[hybrid_astar] searching from ({x0:.2f}, {y0:.2f}) to ({xg:.2f}, {yg:.2f})")
 
-    start_key = discretize(start, config.xy_spacing, config.angular_spacing, config.angular_spacing)
+    start_key = discretize(start, config)
 
     open_set:   list[SearchNode[S]]     = []
     g_score:    dict[NodeKey, float]    = {start_key: 0.0}
@@ -182,7 +177,7 @@ def hybrid_astar(
         node = heapq.heappop(open_set)
         current = node.state
 
-        current_key = discretize(current, config.xy_spacing, config.angular_spacing, config.angular_spacing)
+        current_key = discretize(current, config)
         if current_key in visited:
             continue
         visited.add(current_key)
@@ -207,7 +202,7 @@ def hybrid_astar(
         # explore neighbors
         for prim in prims.get(current):
             endpoint = prim.endpoint
-            endpoint_key = discretize(endpoint, config.xy_spacing, config.angular_spacing, config.angular_spacing)
+            endpoint_key = discretize(endpoint, config)
 
             if not validate_path(env, bot, prim.trajectory):
                 continue

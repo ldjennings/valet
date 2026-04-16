@@ -1,18 +1,17 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import math
 
 
 @dataclass
-class LatticeConfig:
-    spacing: float
-    angular_spacing: float = math.pi / 4
-    terminal_radius: float = 25.0
+class GridConfig:
+    """Discretization grid shared by all grid-based planners."""
+    spacing:         float          = 0.5
+    angular_spacing: float          = math.pi / 4
+    trailer_spacing: float | None   = None        # if None, falls back to angular_spacing
 
 
 @dataclass
-class HybridConfig:
-    xy_spacing: float
-    angular_spacing: float = math.pi / 4
-    terminal_radius: float = 25.0
-    num_headings: int = 3
-    reverse_added_cost: float = .2
+class HybridConfig(GridConfig):
+    """Hybrid A*-specific parameters on top of the base grid config."""
+    num_headings:  int   = 3
+    reverse_cost:  float = 0.2
