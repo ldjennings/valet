@@ -15,9 +15,12 @@ def draw_frame(
     path: list[S] | None = None,
 ) -> None:
     surface.fill(cfg.WHITE)
+
     draw_grid(environment,surface)
+
     if path:
         draw_path(surface, path, cfg.GRAY)
+        
     draw_shape(surface, bot.footprint(goal), cfg.YELLOW, True, cfg.BLACK)
     draw_shape(surface, bot.footprint(state), cfg.GREEN, True, cfg.BLACK)
 
