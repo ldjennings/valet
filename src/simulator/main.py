@@ -113,7 +113,8 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--bot_type",
+        "bot_type",
+        nargs="?",
         choices=["point", "diff", "car", "trailer"],
         default="diff",
         help="Type of bot to simulate",

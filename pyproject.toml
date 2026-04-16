@@ -17,10 +17,13 @@
 [project.scripts]
 runsim="simulator.main:main"
 
-# pyproject.toml
 [tool.mypy]
 python_executable = ".venv/bin/python"
 
+[tool.pyright]
+extraPaths = ["deps/pyReedsShepp"]
+
+# needed for building the reeds-shepp dependency
 [build-system]
 requires = ["setuptools", "cython"]
 build-backend = "setuptools.build_meta"
