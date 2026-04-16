@@ -5,6 +5,7 @@ from Bots.BotState import S
 from shapely.geometry import linestring
 import numpy as np
 import simulator.config as cfg
+from environment.obstacle import ObstacleEnvironment
 
 def scale(points, scale=cfg.METERS_TO_PIXELS):
     return (np.array(points) * scale).tolist()
@@ -57,6 +58,14 @@ def draw_path(surface: pygame.Surface, path: list[S], color):
     lines = linestring.LineString(coords)
 
     draw_shape(surface, lines, color, True)
+
+def draw_grid(
+    obstacles: ObstacleEnvironment,
+    screen: pygame.Surface,
+) -> None:
+    # print(type(self.obstacles.geometries[0]))
+    for g in obstacles.obstacles.geometries:
+        draw_shape(screen, g, cfg.BLACK, True, cfg.GRAY)
 
 
 

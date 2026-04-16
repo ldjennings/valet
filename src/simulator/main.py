@@ -1,12 +1,13 @@
 import simulator.config as cfg
 from simulator.recorder import MP4Recorder, NoOpRecorder
-from simulator.obstacle import ObstacleEnvironment
+from environment.obstacle import ObstacleEnvironment
 from simulator.render import Renderer
 from Bots.Bundle import BotBundle, make_bot
 from Bots.BotState import S
 from Planner.astar import lattice_astar
 from Planner.LatticeConfig import LatticeConfig
 from Planner.primitives import PrimitiveTable
+
 
 
 
@@ -145,7 +146,7 @@ def main() -> None:
 
 
     bundle = make_bot(args.bot_type, startxy, goalxy)
-    environment = ObstacleEnvironment((cfg.NUM_ROWS, cfg.NUM_COLS), 0.1, trailer)
+    environment = ObstacleEnvironment((cfg.NUM_ROWS, cfg.NUM_COLS), cfg.CELLS_TO_METERS, 0.1, trailer)
 
     run(bundle, environment, args.manual, args.record)
 

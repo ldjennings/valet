@@ -2,8 +2,8 @@ from typing import Generic
 import simulator.config as cfg
 from Bots.Bots import Bot
 from Bots.BotState import S
-from simulator.obstacle import ObstacleEnvironment
-from simulator.draw import *
+from environment.obstacle import ObstacleEnvironment
+from simulator.draw import draw_grid, draw_path, draw_shape
 
 import pygame
 
@@ -16,7 +16,7 @@ def draw_frame(
     path: list[S] | None = None,
 ) -> None:
     surface.fill(cfg.WHITE)
-    environment.draw_grid(surface)
+    draw_grid(environment,surface)
     if path:
         draw_path(surface, path, cfg.GRAY)
     draw_shape(surface, bot.footprint(goal), cfg.YELLOW, True, cfg.BLACK)
