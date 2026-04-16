@@ -1,3 +1,10 @@
+"""
+BotBundle groups a bot instance with its start and goal states.
+
+Provides a single container that is passed through the planner and simulator,
+keeping the bot and its states co-located and type-consistent.
+"""
+
 from Bots.Bots import Bot, PointBot, DiffBot, CarBot, TrailerBot
 from Bots.BotState import S, PointState, DiffState, CarState, TrailerState
 from typing import Generic
@@ -6,14 +13,35 @@ from dataclasses import dataclass
 
 @dataclass
 class BotBundle(Generic[S]):
-    bot: Bot[S]  # a Bot whose methods all speak S
-    start: S  # the current state, also S
-    goal: S  # the goal state, S as well
+    """
+    Container grouping a bot with its start and goal states.
+
+    Generic over S so that the type checker can verify that bot, start, and goal
+    all share the same state type — e.g., a BotBundle[CarState] cannot hold a DiffBot.
+    """
+
+    bot: Bot[S]
+    start: S
+    goal: S
 
 
 def make_bot(
     geom: str, start: tuple[float, float], goal: tuple[float, float]
 ) -> BotBundle:
+    """
+    Factory that constructs a BotBundle from a geometry string and (x, y) positions.
+
+    Start and goal headings default to 0; use BotBundle directly if non-zero
+    headings are needed.
+
+    Args:
+        geom: One of "point", "diff", "car", or "trailer".
+        start: (x, y) world position in meters for the start state.
+        goal: (x, y) world position in meters for the goal state.
+
+    Raises:
+        ValueError: If geom is not a recognised robot type.
+    """
     match geom:
         case "point":
             return BotBundle(

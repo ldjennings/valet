@@ -1,3 +1,12 @@
+"""
+Kinematics and interface implementations for each robot type.
+
+Defines the Bot Protocol (structural interface) and four concrete implementations:
+PointBot, DiffBot, CarBot, and TrailerBot. Each pairs with a corresponding state
+type from BotState and implements footprint generation, goal checking, trajectory
+generation, and keyboard input handling.
+"""
+
 from Planner.LatticeConfig import LatticeConfig
 import simulator.config as cfg
 from Bots.BotState import (
@@ -17,7 +26,7 @@ from shapely.geometry.base import BaseGeometry
 import pygame
 import numpy as np
 
-# just a constant for now
+# Simulation timestep in seconds. All step() kinematics use this value.
 DT = 1 / 30
 
 
@@ -38,9 +47,11 @@ class Bot(Protocol[S]):
 
     def generate_trajectory(self, start: S, goal: S, resolution: float = 0.1) -> list[S] | None:
         """
-        Generates a kinematically correct trajectory from the start state to the
-        end state. Returns None if no feasible connection exists.
-        TODO: figure out if I actually need to worry about none points, should be feasible
+        Generate a kinematically correct trajectory from start to goal.
+
+        Returns a list of states at approximately `resolution` meter intervals,
+        or None if no feasible connection exists (e.g. non-holonomic bots that
+        lack a closed-form BVP solution).
         """
         ...
 
@@ -68,11 +79,18 @@ class Bot(Protocol[S]):
         """
         ...
 
-    def make_state(self, x: float, y: float, h: float = 0, t:float = 0) -> S:
+    def make_state(self, x: float, y: float, h: float = 0, t: float = 0) -> S:
+        """
+        Construct a state of the appropriate type from raw coordinates.
+        h is the heading in radians; t is the trailer heading in radians (TrailerBot only).
+        Provides a uniform way to create states without knowing the concrete type.
+        """
         ...
 
 
 class PointBot:
+    """Holonomic point robot. Can move in any direction; no heading or turning constraints."""
+
     def footprint(self, state: PointState):
         return point_geom(state)
 
@@ -116,6 +134,8 @@ class PointBot:
 
 
 class DiffBot:
+    """Differential drive robot. Can rotate in place; forward/backward and in-place turning."""
+
     def footprint(self, state: DiffState):
         return diff_geom(state)
 
@@ -154,6 +174,8 @@ class DiffBot:
         return DiffState(x, y, h)
 
 class CarBot:
+    """Ackermann steering (car-like) robot. Non-holonomic; minimum turning radius determined by MAX_STEER."""
+
     MAX_STEER = math.radians(35)
 
     def footprint(self, state: CarState):
@@ -193,6 +215,12 @@ class CarBot:
 
 
 class TrailerBot:
+    """
+    Truck-and-trailer system. The truck uses Ackermann steering; the trailer follows
+    passively via hitch kinematics. Goal checking requires both truck and trailer headings
+    to be within tolerance.
+    """
+
     MAX_STEER = math.radians(35)
 
     def footprint(self, state: TrailerState):
