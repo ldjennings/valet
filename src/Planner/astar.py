@@ -10,7 +10,9 @@ from dataclasses import dataclass, field
 from typing import Generic
 import math
 
-from typing import Tuple
+from typing import Tuple, TypeAlias
+
+NodeKey: TypeAlias = tuple[int, ...]
 
 @dataclass(order=True)
 class SearchNode(Generic[S]):
@@ -19,7 +21,7 @@ class SearchNode(Generic[S]):
     state: S                    = field(compare=False)                  # continuous state
     parent: "SearchNode | None" = field(compare=False, default=None)
     trajectory: list[S]  | None = field(compare=False, default=None)    # trajectory FROM parent TO this node
- 
+
 
 def reconstruct_path(node: SearchNode[S], final_path: list[S] = []) -> list[S]:
     arcs = []
@@ -30,9 +32,9 @@ def reconstruct_path(node: SearchNode[S], final_path: list[S] = []) -> list[S]:
     path = []
     for arc in arcs:
         path.extend(arc if len(path) == 0 else arc[1:]) # unless at first node, all the paths will overlap at the end, so need this check
-    
+
     # if we have a final path afterwards (usually one-shot closed-form trajectory), add that onto the end
-    path.extend(final_path) 
+    path.extend(final_path)
 
     return path
 
@@ -43,11 +45,39 @@ def validate_path(obstacles: ObstacleEnvironment, bot: Bot, path: list[S]) -> bo
         for s in path
     )
 
+def discretize(
+        state: S,
+        position_resolution: float,
+        heading_resolution: float | None,
+        trailer_resolution: float | None
+    ) -> NodeKey:
+
+    x, y, *rest = state
+    key: NodeKey = (round(x / position_resolution), round(y / position_resolution))
+
+    if rest and heading_resolution is not None:
+        key += (round(rest[0] / heading_resolution),)
+
+    if len(rest) > 1 and trailer_resolution is not None:
+        key += (round(rest[1] / trailer_resolution),)
+
+    return key
+
+
+
 
 # based off of wikipedia article, particularly the pseudocode found here: https://en.wikipedia.org/wiki/A*_search_algorithm#Pseudocode
 # only really works with the point robots lmao, was not able to get it working with a Diff
 
-def lattice_astar(env: ObstacleEnvironment, bot: Bot, start: S, goal: S, config: LatticeConfig, prims: PrimitiveTable) -> list[S] | None:
+def lattice_astar(
+        env: ObstacleEnvironment,
+        bot: Bot,
+        start: S,
+        goal: S,
+        config: LatticeConfig,
+        prims: PrimitiveTable
+    ) -> list[S] | None:
+
     # Just doing euclidean distance, not considering heading at all. Works for every bot and is compliant
     #  with A* restrictions
     def h(s1: S, s2: S) -> float:
@@ -55,30 +85,51 @@ def lattice_astar(env: ObstacleEnvironment, bot: Bot, start: S, goal: S, config:
         x2, y2, *_ = s2
         return math.hypot(x2 - x1, y2 - y1)
 
-    start_node = SearchNode(f_cost=h(start, goal), g_cost=0.0, state=start)
-    open_set:  list[SearchNode[S]] = [start_node]
-    g_score:   dict[S, float]      = {start: 0.0}
-    visited:   set[S]              = set()
+    LOG_INTERVAL = 500  # print a status line every N expansions
 
-    # heapq.heappush(open_set, (h(start, goal), counter, start))
+    x0, y0, *_ = start
+    xg, yg, *_ = goal
+    print(f"[lattice_astar] searching from ({x0:.2f}, {y0:.2f}) to ({xg:.2f}, {yg:.2f})")
+
+    start_key = discretize(start, config.spacing, config.angular_spacing, config.angular_spacing)
+
+    start_node: SearchNode[S]           = SearchNode(f_cost=h(start, goal), g_cost=0.0, state=start)
+    open_set:   list[SearchNode[S]]     = [start_node]
+    g_score:    dict[NodeKey, float]    = {start_key: 0.0}
+    visited:    set[NodeKey]            = set()
+
     heapq.heappush(open_set, SearchNode(
         f_cost = h(start, goal),
-        g_cost = g_score[start],
+        g_cost = g_score[start_key],
         state  = start,
     ))
 
 
     while open_set:
+
         node = heapq.heappop(open_set)
         current = node.state
 
-        if current in visited:
+        current_key = discretize(current, config.spacing, config.angular_spacing, config.angular_spacing)
+        if current_key in visited:
             continue
-        visited.add(current)
+        visited.add(current_key)
+
+        if len(visited) % LOG_INTERVAL == 0:
+            x, y, *_ = current
+            print(f"[lattice_astar] expanded {len(visited):5d} nodes | "
+                f"open = {len(open_set):5d} | "
+                f"g = {node.g_cost:.2f} | "
+                f"h = {h(current, goal):.2f} | "
+                f"pos = ({x:.2f}, {y:.2f})")
 
         if bot.is_terminal(current, goal, config):
             attempted_path = bot.generate_trajectory(current, goal)
+
             if attempted_path is not None and validate_path(env, bot, attempted_path):
+                print(f"[lattice_astar] found path: {len(visited)} expansions, "
+                    f"{len(reconstruct_path(node, attempted_path))} states")
+
                 return reconstruct_path(node, attempted_path)
 
         # explore neighbors
@@ -94,12 +145,15 @@ def lattice_astar(env: ObstacleEnvironment, bot: Bot, start: S, goal: S, config:
                 g_score[endpoint]   = tentative_g
                 f                   = tentative_g + h(endpoint, goal)
                 heapq.heappush(open_set, SearchNode(
-                    f_cost      = f, 
+                    f_cost      = f,
                     g_cost      = tentative_g,
                     state       = endpoint,
                     parent      = node,
                     trajectory  = prim.trajectory
                 ))
+
+    print(f"[lattice_astar] no path found after {len(visited)} expansions")
+
     return None
 
 
@@ -111,37 +165,7 @@ def lattice_astar(env: ObstacleEnvironment, bot: Bot, start: S, goal: S, config:
         x1, y1, *_ = s1
         x2, y2, *_ = s2
         return math.hypot(x2 - x1, y2 - y1)
-    
-    def reconstruct_final_path(stop_state: S, origin_paths: dict[S, S]) -> list[S]:
-        path = [goal]
 
-        current_node = path[0]
-        previous_node = stop_state
-        while previous_node in came_from:
-            traj = bot.generate_trajectory(previous_node, current_node)
-            
-            assert traj != None, "This should be guaranteed, if the primitives were correct"
-
-            traj.reverse()
-            path.extend(traj[1:])
-            current_node = previous_node
-            previous_node = origin_paths[previous_node]
-
-        path.append(previous_node)
-        path.reverse()
-        print(len(path))
-
-        # DEBUG CODE
-        # for i in range(len(path) - 1):
-        #     assert path[i] != path[i+1], f"Duplicate adjacent states at index {i}: {path[i]}"
-
-        return path
-
-    def path_is_valid(path: list[S]) -> bool:
-        return all(
-            env.is_valid_state(bot.footprint(s))
-            for s in path
-        )
 
 
     open_set:  list[Tuple[float, int, S]]   = []            # priority queue of possible nodes to expand next
