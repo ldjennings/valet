@@ -2,7 +2,7 @@ from typing import Generic
 import simulator.config as cfg
 from Bots import Bot, S
 from environment.obstacle import ObstacleEnvironment
-from simulator.draw import draw_grid, draw_path, draw_shape
+from simulator.draw import draw_grid, draw_path, draw_shape, draw_visited
 
 import pygame
 
@@ -13,16 +13,22 @@ def draw_frame(
     goal: S,
     environment: ObstacleEnvironment,
     path: list[S] | None = None,
+    visited_xy: list[tuple[float, float]] | None = None,
 ) -> None:
     surface.fill(cfg.WHITE)
 
-    draw_grid(environment,surface)
+    draw_grid(environment, surface)
+
+    if visited_xy:
+        draw_visited(surface, visited_xy, cfg.LIGHT_BLUE)
 
     if path:
         draw_path(surface, path, cfg.GRAY)
-        
-    draw_shape(surface, bot.footprint(goal), cfg.YELLOW, True, cfg.BLACK)
-    draw_shape(surface, bot.footprint(state), cfg.GREEN, True, cfg.BLACK)
+
+    for g in bot.footprint(goal):
+        draw_shape(surface, g, cfg.YELLOW, True, cfg.BLACK)
+    for g in bot.footprint(state):
+        draw_shape(surface, g, cfg.GREEN, True, cfg.BLACK)
 
 def draw_to_screen(screen: pygame.Surface, virtual_screen: pygame.Surface):
     # Preserving aspect ratio
@@ -52,7 +58,7 @@ class Renderer(Generic[S]):
         self.screen = pygame.display.set_mode(cfg.VIRTUAL_SIZE, pygame.RESIZABLE)
         pygame.display.set_caption("Planner Sim")
 
-    def render(self, state: S, path: list[S] | None = None):
-        draw_frame(self.next_frame, self.bot, state, self.goal, self.env, path)
+    def render(self, state: S, path: list[S] | None = None, visited_xy: list[tuple[float, float]] | None = None):
+        draw_frame(self.next_frame, self.bot, state, self.goal, self.env, path, visited_xy)
         draw_to_screen(self.screen, self.next_frame)
         pygame.display.flip()

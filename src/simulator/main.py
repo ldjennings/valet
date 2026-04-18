@@ -1,10 +1,13 @@
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="pkg_resources")
+
 import simulator.config as cfg
 from simulator.recorder import MP4Recorder, NoOpRecorder
 from environment import ObstacleEnvironment
 from simulator.render import Renderer
 from Bots import BotBundle, make_bot, S
-from Planner.astar import lattice_astar
-from Planner.AstarConfig import GridConfig
+from Planner.astar import lattice_astar, hybrid_astar
+from Planner.AstarConfig import GridConfig, HybridConfig
 from Planner.primitives import PrimitiveTable
 
 
@@ -45,15 +48,16 @@ def run(
     ## Generating a kinematically correct path ##
     # bind variables outside of conditionals so pylance doesnt yell at me
     path: list[S] | None = None
+    visited_xy: list[tuple[float, float]] | None = None
     path_index = 0
 
     # calculate path planning before loop
     if not manual:
-        # generate navigation primitives
-        primitives = PrimitiveTable(bot, lattice_config)
-
-        # do path planning
-        path = lattice_astar(environment, bot, bundle.start, goal, lattice_config, primitives)
+        result = hybrid_astar(environment, bot, state, goal, HybridConfig(), debug=True)
+        # prims = PrimitiveTable(bot, GridConfig())
+        # result = lattice_astar(environment, bot, state, goal, GridConfig(), prims,debug=True)
+        path = result.path
+        visited_xy = result.visited_xy or None
         if path is None:
             print("No path found.")
 
@@ -68,9 +72,7 @@ def run(
 
         if manual: # manual mode, control robot with keyboard
             next_state = bot.handle_input(state, 3.0)
-            next_geom = bot.footprint(next_state)
-
-            if environment.is_valid_state(next_geom):
+            if environment.is_valid_state(bot.footprint(next_state)):
                 state = next_state
         else:
             # Animate by stepping along precomputed path at N states per frame
@@ -79,7 +81,7 @@ def run(
                 path_index += 1
 
 
-        renderer.render(state, path)
+        renderer.render(state, path, visited_xy)
         recorder.capture(renderer.screen)
         clock.tick(30)
 
@@ -133,7 +135,7 @@ def main() -> None:
     start_goal = {
         "point":   ((0, 0),     (-3.5, -1)),
         "diff":    ((0, 0),     (-3.5, -1)),
-        "car":     ((0.5, 0),   (-3.55, -1)),
+        "car":     ((0.5, 0),   (-3.6, -1)),
         "trailer": ((2, 0),     (-4, -1)),
     }
 
@@ -146,7 +148,7 @@ def main() -> None:
 
 
     bundle = make_bot(args.bot_type, startxy, goalxy)
-    environment = ObstacleEnvironment((cfg.NUM_ROWS, cfg.NUM_COLS), cfg.CELLS_TO_METERS, 0.1, trailer)
+    environment = ObstacleEnvironment((cfg.NUM_ROWS, cfg.NUM_COLS), cfg.CELLS_TO_METERS, 0.0, trailer)
 
     run(bundle, environment, args.manual, args.record)
 

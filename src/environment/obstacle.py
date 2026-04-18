@@ -2,7 +2,7 @@ from environment.grid import populate_grid, clear_start_goal
 
 import numpy as np
 from shapely import STRtree
-from shapely.geometry import box
+from shapely.geometry import box, Point
 from shapely.geometry.base import BaseGeometry
 
 
@@ -68,9 +68,21 @@ class ObstacleEnvironment:
 
         return self.grid[x_cell][y_cell]
 
-    def is_valid_state(self, bot_geom: BaseGeometry) -> bool:
-        """Return True if the given geometry does not intersect any obstacle and lies fully within the environment boundary."""
-        return not intersects_any(self.obstacles, bot_geom) and self.enclosure_geom.contains(bot_geom)
+    def is_point_free(self, x: float, y: float) -> bool:
+        """Fast check: is (x, y) inside the boundary and not inside any obstacle cell?"""
+        if not (0 <= x <= self.enclosure_geom.bounds[2] and 0 <= y <= self.enclosure_geom.bounds[3]):
+            return False
+        cx, cy = int(x // self.cell_size), int(y // self.cell_size)
+        if 0 <= cy < self.grid.shape[0] and 0 <= cx < self.grid.shape[1]:
+            return self.grid[cy][cx] == 0
+        return False
+
+    def is_valid_state(self, bot_geoms: list[BaseGeometry]) -> bool:
+        """Return True if none of the geometries intersect any obstacle and all lie within the boundary."""
+        return all(
+            not intersects_any(self.obstacles, g) and self.enclosure_geom.contains(g)
+            for g in bot_geoms
+        )
 
 
 

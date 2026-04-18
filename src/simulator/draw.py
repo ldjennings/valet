@@ -44,7 +44,7 @@ def draw_shape(
     elif geom.geom_type in ("MultiPolygon", "GeometryCollection"):
         for g in geom.geoms:
             draw_shape(surface, g, color, outline, outline_color)
-            
+
     else:
         ValueError(f"unimplemented geometry type: {geom.geom_type}")
 
@@ -53,26 +53,21 @@ def draw_path(surface: pygame.Surface, path: list[S], color):
     def extract_xy(state: S):
         x, y, *_ = state
         return (x,y)
-    
+
     coords = map(extract_xy, path)
     lines = linestring.LineString(coords)
 
     draw_shape(surface, lines, color, True)
 
+def draw_visited(surface: pygame.Surface, visited_xy: list[tuple[float, float]], color):
+    for x, y in visited_xy:
+        px, py = int(x * cfg.METERS_TO_PIXELS), int(y * cfg.METERS_TO_PIXELS)
+        pygame.draw.circle(surface, color, (px, py), 3)
+
+
 def draw_grid(
     obstacles: ObstacleEnvironment,
     screen: pygame.Surface,
 ) -> None:
-    # print(type(self.obstacles.geometries[0]))
     for g in obstacles.obstacles.geometries:
         draw_shape(screen, g, cfg.BLACK, True, cfg.GRAY)
-
-
-
-
-
-
-
-
-
-

@@ -1,14 +1,20 @@
-# from Bots.BotState import BotState
 from environment.obstacle import ObstacleEnvironment
 from Bots import S, Bot, TrailerBot
-from Planner.primitives import PrimitiveTable
+from Planner.primitives import PrimitiveTable, propagated_primitives
 from .AstarConfig import GridConfig, HybridConfig
 import heapq
 from dataclasses import dataclass, field
 from typing import Generic
 from typing import TypeAlias
 
+import math
 NodeKey: TypeAlias = tuple[int, ...]
+
+@dataclass
+class PlanResult(Generic[S]):
+    path:       list[S] | None
+    visited_xy: list[tuple[float, float]]   # (x, y) of every expanded node, for debug viz
+
 
 @dataclass(order=True)
 class SearchNode(Generic[S]):
@@ -37,22 +43,50 @@ def reconstruct_path(node: SearchNode[S], final_path: list[S] = []) -> list[S]:
     return path
 
 
-def validate_path(obstacles: ObstacleEnvironment, bot: Bot, path: list[S]) -> bool:
-    return all(
-        obstacles.is_valid_state(bot.footprint(s))
-        for s in path
-    )
+def validate_path(
+    obstacles: ObstacleEnvironment, bot: Bot, path: list[S],
+    coarse_step: int = 4, fine: bool = True,
+) -> bool:
+    # Phase 1: center-point + full footprint on sparse subset (endpoints + every Nth).
+    for i in range(0, len(path), coarse_step):
+        x, y, *_ = path[i]
+        if not obstacles.is_point_free(x, y):
+            return False
+        if not obstacles.is_valid_state(bot.footprint(path[i])):
+            return False
+
+    # always check last state
+    x, y, *_ = path[-1]
+    if not obstacles.is_point_free(x, y):
+        return False
+    if not obstacles.is_valid_state(bot.footprint(path[-1])):
+        return False
+
+    if not fine:
+        return True
+
+    # Phase 2: fill in remaining states.
+    for i in range(len(path)):
+        if i % coarse_step == 0:
+            continue
+        if not obstacles.is_valid_state(bot.footprint(path[i])):
+            return False
+
+    return True
+
 
 def discretize(state: S, config: GridConfig) -> NodeKey:
     x, y, *rest = state
     key: NodeKey = (round(x / config.spacing), round(y / config.spacing))
 
     if rest:
-        key += (round(rest[0] / config.angular_spacing),)
+        heading = rest[0] % (2 * math.pi)   # normalize to [0, 2π)
+        key += (round(heading / config.angular_spacing),)
 
     if len(rest) > 1:
         trailer_res = config.trailer_spacing if config.trailer_spacing is not None else config.angular_spacing
-        key += (round(rest[1] / trailer_res),)
+        trailer_heading = rest[1] % (2 * math.pi)   # normalize to [0, 2π)
+        key += (round(trailer_heading / trailer_res),)
 
     return key
 
@@ -67,8 +101,9 @@ def lattice_astar(
         start: S,
         goal: S,
         config: GridConfig,
-        prims: PrimitiveTable
-    ) -> list[S] | None:
+        prims: PrimitiveTable,
+        debug: bool = False,
+    ) -> PlanResult[S]:
 
     LOG_INTERVAL = 500  # print a status line every N expansions
 
@@ -78,9 +113,10 @@ def lattice_astar(
 
     start_key = discretize(start, config)
 
-    open_set:   list[SearchNode[S]]     = []
-    g_score:    dict[NodeKey, float]    = {start_key: 0.0}
-    visited:    set[NodeKey]            = set()
+    open_set:   list[SearchNode[S]]         = []
+    g_score:    dict[NodeKey, float]        = {start_key: 0.0}
+    visited:    set[NodeKey]                = set()
+    visited_xy: list[tuple[float, float]]   = []
 
     heapq.heappush(open_set, SearchNode(
         f_cost = bot.heuristic(start, goal),
@@ -99,8 +135,11 @@ def lattice_astar(
             continue
         visited.add(current_key)
 
+        x, y, *_ = current
+        if debug:
+            visited_xy.append((x, y))
+
         if len(visited) % LOG_INTERVAL == 0:
-            x, y, *_ = current
             print(f"[lattice_astar] expanded {len(visited):5d} nodes | "
                 f"open = {len(open_set):5d} | "
                 f"g = {node.g_cost:.2f} | "
@@ -116,7 +155,11 @@ def lattice_astar(
 
                 initial_path = reconstruct_path(node, attempted_path)
 
-                return smooth_path(initial_path, bot, env)
+                return PlanResult(
+                    path=smooth_path(initial_path, bot, env),
+                    # path = initial_path,
+                    visited_xy=visited_xy,
+                )
 
         # explore neighbors
         for prim in prims.get(current):
@@ -141,7 +184,7 @@ def lattice_astar(
 
     print(f"[lattice_astar] no path found after {len(visited)} expansions")
 
-    return None
+    return PlanResult(path=None, visited_xy=visited_xy)
 
 
 
@@ -151,7 +194,8 @@ def hybrid_astar(
         start: S,
         goal: S,
         config: HybridConfig,
-    ) -> list[S] | None:
+        debug: bool = False,
+    ) -> PlanResult[S]:
 
     LOG_INTERVAL = 500  # print a status line every N expansions
 
@@ -161,9 +205,10 @@ def hybrid_astar(
 
     start_key = discretize(start, config)
 
-    open_set:   list[SearchNode[S]]     = []
-    g_score:    dict[NodeKey, float]    = {start_key: 0.0}
-    visited:    set[NodeKey]            = set()
+    open_set:   list[SearchNode[S]]         = []
+    g_score:    dict[NodeKey, float]        = {start_key: 0.0}
+    visited:    set[NodeKey]                = set()
+    visited_xy: list[tuple[float, float]]   = []
 
     heapq.heappush(open_set, SearchNode(
         f_cost = bot.heuristic(start, goal),
@@ -182,8 +227,15 @@ def hybrid_astar(
             continue
         visited.add(current_key)
 
+        x, y, *_ = current
+        if debug:
+            visited_xy.append((x, y))
+
+        if config.max_iterations is not None and len(visited) >= config.max_iterations:
+            print(f"[hybrid_astar] hit max_iterations ({config.max_iterations}) — stopping")
+            return PlanResult(path=None, visited_xy=visited_xy)
+
         if len(visited) % LOG_INTERVAL == 0:
-            x, y, *_ = current
             print(f"[hybrid_astar] expanded {len(visited):5d} nodes | "
                 f"open = {len(open_set):5d} | "
                 f"g = {node.g_cost:.2f} | "
@@ -193,18 +245,24 @@ def hybrid_astar(
         if bot.is_terminal(current, goal):
             attempted_path = bot.generate_trajectory(current, goal)
 
-            if attempted_path is not None and validate_path(env, bot, attempted_path):
+            if attempted_path is not None \
+                and validate_path(env, bot, attempted_path, fine=config.fine_collision) \
+                and bot.at_goal(attempted_path[-1], goal):
+
                 print(f"[hybrid_astar] found path: {len(visited)} expansions, "
                     f"{len(reconstruct_path(node, attempted_path))} states")
 
-                return reconstruct_path(node, attempted_path)
+                return PlanResult(
+                    path=reconstruct_path(node, attempted_path),
+                    visited_xy=visited_xy,
+                )
 
         # explore neighbors
-        for prim in prims.get(current):
+        for prim in propagated_primitives(bot, current, config, config.steering_granularity):
             endpoint = prim.endpoint
             endpoint_key = discretize(endpoint, config)
 
-            if not validate_path(env, bot, prim.trajectory):
+            if not validate_path(env, bot, prim.trajectory, fine=config.fine_collision):
                 continue
 
             tentative_g = node.g_cost + prim.cost
@@ -222,7 +280,7 @@ def hybrid_astar(
 
     print(f"[hybrid_astar] no path found after {len(visited)} expansions")
 
-    return None
+    return PlanResult(path=None, visited_xy=visited_xy)
 
 
 def smooth_path(

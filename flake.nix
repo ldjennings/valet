@@ -6,7 +6,11 @@
   outputs = { nixpkgs, ... }:
     let
       system = "x86_64-linux";
-      pkgs = nixpkgs.legacyPackages.${system};
+      # pkgs = nixpkgs.legacyPackages.${system};
+      pkgs = import nixpkgs.outPath {
+        system = "x86_64-linux";
+        config.allowUnfree = true;
+      };
     in {
       devShells.${system}.default = pkgs.mkShell {
         # NixOS system requirements (add to your NixOS configuration):
@@ -20,6 +24,8 @@
         # };
         # Without this, pip-installed native packages (numpy, scipy etc.)
         # will fail to load libstdc++.so.6 at runtime.
+        # nixpkgs.config.allowUnfree = true;
+
         packages = with pkgs; [
           python312
           python312Packages.pip
@@ -27,6 +33,7 @@
           python312Packages.mypy
           python312Packages.ruff      # linter + formatter, replaces flake8/black/isort
           boost
+          claude-code
         ];
 
         shellHook = ''

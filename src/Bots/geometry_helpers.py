@@ -4,135 +4,77 @@ Shapely geometry construction for robot collision footprints.
 Each function takes a bot state and returns a Shapely geometry representing
 the robot's physical extent at that state, used for collision checking against
 the obstacle environment.
+
+Base shapes (rectangles, circles) are built once via make_*_base() and cached
+by the bot instance. Per-state footprint calls only rotate + translate.
 """
 
 import simulator.config as cfg
 from Bots.BotState import PointState, DiffState, CarState, TrailerState
 
 import math
-from shapely.ops import unary_union
 from shapely.affinity import rotate, translate
-from shapely.geometry import box, Point, Polygon, LineString
+from shapely.geometry import box, Point, LineString
 from shapely.geometry.base import BaseGeometry
 
 
-def point_geom(state: PointState) -> BaseGeometry:
-    """Return a circular footprint for a point robot. Radius is fixed at 1.0 m."""
-    x, y = state
-    return Point(x, y).buffer(1.0)
+# ── base shape constructors (call once, cache the result) ────────────────
+
+def make_point_base(radius: float = 1.0) -> BaseGeometry:
+    """Unit circle at origin."""
+    return Point(0, 0).buffer(radius)
 
 
-def make_rect_geom(
-    centerX: float, centerY: float, angle_rad: float, length: float, width: float
-) -> BaseGeometry:
-    """
-    Build a rotated rectangle centered at (centerX, centerY).
-
-    Constructs the rectangle at the origin, rotates it by angle_rad, then
-    translates to the final position. The center of the rectangle coincides
-    with the given coordinates — use ackermann_car_geom for rear-axle-referenced models.
-    """
-    angle_deg = math.degrees(angle_rad)
-    initial = box(-length / 2, -width / 2, length / 2, width / 2)
-    rot = rotate(initial, angle_deg)
-    positioned = translate(rot, centerX, centerY)
-
-    return positioned
+def make_centered_rect_base(length: float, width: float) -> BaseGeometry:
+    """Rectangle centered at origin (for center-referenced bots like DiffBot)."""
+    return box(-length / 2, -width / 2, length / 2, width / 2)
 
 
-
-
-def diff_geom(state: DiffState) -> BaseGeometry:
-    x, y, heading_rad = state
-    return make_rect_geom(
-        x, y, heading_rad, cfg.ROBOT_LENGTH_METERS, cfg.ROBOT_WIDTH_METERS
-    )
-
-
-def ackermann_car_geom(
-        axle_center_x: float,
-        axle_center_y: float,
-        angle_rad: float,
-        wheelbase: float,
-        length: float,
-        width: float,
-    ) -> BaseGeometry:
-    """
-    Build a rectangle whose rear axle is at (axle_center_x, axle_center_y).
-
-    Cars are referenced to the rear axle, so the body extends forward by the
-    wheelbase and back by the rear overhang (length - wheelbase). The rectangle
-    is first built centered at the origin, then shifted forward along the x-axis
-    so the rear axle sits at x=0, then rotated and translated to world position.
-
-    Args:
-        axle_center_x/y: World position of the rear axle center in meters.
-        angle_rad: Heading of the vehicle in world space.
-        wheelbase: Distance between front and rear axles in meters.
-        length: Total vehicle length in meters.
-        width: Total vehicle width in meters.
-    """
-
-    # making base rectangle centered at the origin
+def make_axle_rect_base(wheelbase: float, length: float, width: float) -> BaseGeometry:
+    """Rectangle with rear axle at origin (for Ackermann bots)."""
     rect = box(-length / 2, -width / 2, length / 2, width / 2)
-
-    # calculating offset to place rear axle center at the origin
     rear_overhang = length - wheelbase
     offset = (length / 2) - rear_overhang
-    rect = translate(rect, xoff=offset)
+    return translate(rect, xoff=offset)
 
-    # rotating/translating to final world position
-    rect = rotate(rect, math.degrees(angle_rad), origin=(0, 0))
-    rect = translate(rect, xoff=axle_center_x, yoff=axle_center_y)
-    return rect
 
-def car_geom(state: CarState) -> BaseGeometry:
+# ── per-state placement (rotate + translate only) ────────────────────────
+
+def place(base: BaseGeometry, x: float, y: float, angle_rad: float) -> BaseGeometry:
+    """Rotate base shape by angle_rad about origin, then translate to (x, y)."""
+    return translate(rotate(base, math.degrees(angle_rad), origin=(0, 0)), xoff=x, yoff=y)
+
+
+def point_geom(base: BaseGeometry, state: PointState) -> BaseGeometry:
+    x, y = state
+    return translate(base, xoff=x, yoff=y)
+
+
+def diff_geom(base: BaseGeometry, state: DiffState) -> BaseGeometry:
     x, y, heading_rad = state
-    return ackermann_car_geom(
-        x,
-        y,
-        heading_rad,
-        cfg.CAR_WHEELBASE_METERS,
-        cfg.CAR_LENGTH_METERS,
-        cfg.CAR_WIDTH_METERS,
-    )
+    return place(base, x, y, heading_rad)
 
 
-def truck_geom(x: float, y: float, heading_rad: float) -> BaseGeometry:
-    TRUCK_LEN = cfg.TRUCK_LENGTH_METERS
-    TRUCK_WID = cfg.TRUCK_WIDTH_METERS
-    WHEELBASE = cfg.TRUCK_WHEELBASE_METERS
-    return ackermann_car_geom(x, y, heading_rad, WHEELBASE, TRUCK_LEN, TRUCK_WID)
+def car_geom(base: BaseGeometry, state: CarState) -> BaseGeometry:
+    x, y, heading_rad = state
+    return place(base, x, y, heading_rad)
 
 
-def truck_trailer_geom(state: TrailerState) -> BaseGeometry:
+def truck_trailer_geom(
+    truck_base: BaseGeometry, trailer_base: BaseGeometry, state: TrailerState
+) -> list[BaseGeometry]:
     """
-    Build the combined footprint for a truck-and-trailer system.
-
-    The truck is referenced to its rear axle (the hitch point). The trailer axle
-    position is derived by stepping back from the hitch along the trailer heading
-    by TRUCK_HITCH_TO_TRAILER_AXLE. The returned geometry is the union of the
-    truck rectangle, trailer rectangle, and a line connecting the two axles
-    (representing the hitch arm) for visual and collision purposes.
+    Returns [truck, trailer, connection] as separate geometries.
     """
+    x, y, truck_heading, trailer_heading = state
 
-    x, y, truck_heading_rad, trailer_heading_rad = state
+    truck = place(truck_base, x, y, truck_heading)
 
-    truck = truck_geom(x, y, truck_heading_rad)
-
-    TRAILER_LEN = cfg.TRAILER_LENGTH_METERS
-    TRAILER_WID = cfg.TRAILER_WIDTH_METERS
     D1 = cfg.TRUCK_HITCH_TO_TRAILER_AXLE
+    x_t = x - D1 * math.cos(trailer_heading)
+    y_t = y - D1 * math.sin(trailer_heading)
 
-    # Trailer axle x/y
-    x_t = x - D1 * math.cos(trailer_heading_rad)
-    y_t = y - D1 * math.sin(trailer_heading_rad)
-
-    trailer = make_rect_geom(
-        x_t, y_t, trailer_heading_rad, TRAILER_LEN, TRAILER_WID
-    )
-
-    # line between the centers of the rear axles of both
+    trailer = place(trailer_base, x_t, y_t, trailer_heading)
     connection = LineString([(x, y), (x_t, y_t)])
 
-    return unary_union([truck, trailer, connection])
+    return [connection, truck, trailer]

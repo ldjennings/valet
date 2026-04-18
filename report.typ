@@ -6,7 +6,6 @@
 === Introduction
 For this assignment, I simulated the kinematics of the robot, car, and trailer using a state lattice, and implemented a collision checker using #link("https://shapely.readthedocs.io/en/stable/")[shapely], a python library used to model and manipulate geometry.
 
-I apologize for this assignment. I worked on it when I had a fever and forgot to go to sleep.
 
 ==== Usage
 Dependencies are managed through a `pyproject.toml` file. Create a virtual environment, then run `pip install .`. 
@@ -15,7 +14,6 @@ To run the main simulator, now enter the command `runsim`, as an entry point was
 
 To specify the configuration to collision check, use `--work` to specify   `diff`, `car`, or `trailer`.
 
-To see what I was experimenting with for the rest of the assignment, see the scratch directory.
 
 === Approach
 

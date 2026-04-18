@@ -16,8 +16,8 @@ METERS_TO_PIXELS = min(
 
 goal_radius_tolerance: float = 0.25
 # goal_radius_tolerance: float = 5
-goal_heading_tolerance: float = math.pi / 16
-trailer_heading_tolerance: float = math.pi / 6
+goal_heading_tolerance: float = math.pi / 12
+trailer_heading_tolerance: float = math.pi / 32
 
 
 # differential drive robot dimensions
@@ -26,8 +26,10 @@ ROBOT_LENGTH_METERS = 0.7
 ROBOT_WHEELBASE_METERS = ROBOT_WIDTH_METERS / 2
 
 # Car dimensions
-CAR_WIDTH_METERS = 1.8
-CAR_LENGTH_METERS = 5.2
+# CAR_WIDTH_METERS = 1.8
+# CAR_LENGTH_METERS = 5.2
+CAR_WIDTH_METERS = 1.5
+CAR_LENGTH_METERS = 4.2
 CAR_WHEELBASE_METERS = 2.8
 
 # Truck dimensions
@@ -47,3 +49,4 @@ RED = (200, 0, 0)
 BLUE = (0, 0, 200)
 YELLOW = (255, 255, 0)
 GRAY = (150, 150, 150)
+LIGHT_BLUE = (100, 180, 255)
