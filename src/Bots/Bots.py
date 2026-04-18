@@ -271,38 +271,41 @@ class DiffBot:
     def generate_trajectory(
         self, start: DiffState, goal: DiffState, resolution: float = 0.1
     ) -> list[DiffState] | None:
-        states: list[DiffState] = [start]
-        current = start
-        max_rotate = round(2 * math.pi / (self.OMEGA_MAX * DT)) + 5
-
-        dx = goal.center_x - start.center_x
-        dy = goal.center_y - start.center_y
-        dist = math.hypot(dx, dy)
+        """
+        Connect start to goal via rotate-drive-rotate, interpolated at
+        `resolution`-sized steps using linspace. No discrete stepping,
+        so no accumulation error or overshoot.
+        """
+        states: list[DiffState] = []
+        sx, sy, sh = start.center_x, start.center_y, start.heading_rad
+        gx, gy, gh = goal.center_x, goal.center_y, goal.heading_rad
+        dist = np.hypot(gx - sx, gy - sy)
 
         if dist > 1e-3:
             # Phase 1: rotate to face goal
-            target = math.atan2(dy, dx)
-            for _ in range(max_rotate):
-                if abs(angle_distance_rad(current.heading_rad, target)) <= self.OMEGA_MAX * DT:
-                    break
-                omega = math.copysign(self.OMEGA_MAX, angle_distance_rad(target, current.heading_rad))
-                current = current.step(0.0, omega, DT)
-                states.append(current)
+            target = math.atan2(gy - sy, gx - sx)
+            delta1 = angle_distance_rad(target, sh)
+            n1 = max(2, math.ceil(abs(delta1) / resolution) + 1)
+            for h in np.linspace(sh, sh + delta1, n1):
+                states.append(DiffState(sx, sy, float(h)))
 
             # Phase 2: drive straight
-            for _ in range(max(1, round(dist / (self.SPEED * DT)))):
-                current = current.step(self.SPEED, 0.0, DT)
-                states.append(current)
+            n2 = max(2, math.ceil(dist / resolution) + 1)
+            for x, y in zip(np.linspace(sx, gx, n2), np.linspace(sy, gy, n2)):
+                states.append(DiffState(float(x), float(y), target))
+
+            heading_after_drive = target
+        else:
+            states.append(start)
+            heading_after_drive = sh
 
         # Phase 3: rotate to goal heading
-        for _ in range(max_rotate):
-            if abs(angle_distance_rad(current.heading_rad, goal.heading_rad)) <= self.OMEGA_MAX * DT:
-                break
-            omega = math.copysign(self.OMEGA_MAX, angle_distance_rad(goal.heading_rad, current.heading_rad))
-            current = current.step(0.0, omega, DT)
-            states.append(current)
+        delta3 = angle_distance_rad(gh, heading_after_drive)
+        if abs(delta3) > 1e-6:
+            n3 = max(2, math.ceil(abs(delta3) / resolution) + 1)
+            for h in np.linspace(heading_after_drive, heading_after_drive + delta3, n3):
+                states.append(DiffState(gx, gy, float(h)))
 
-        states.append(goal)
         return states
 
     def propagate(self, state: DiffState, spacing: float, angular_spacing: float, steering_granularity: int) -> list[list[DiffState]]:
