@@ -26,7 +26,7 @@ def smooth_path(
         path: list[S],
         bot: Bot,
         obstacles: ObstacleEnvironment,
-        iterations: int = 100,
+        iterations: int = 200,
     ) -> list[S]:
     """
     Probabilistic path shortcutting. Repeatedly picks two random indices, attempts
@@ -122,7 +122,7 @@ def resample_rotation(state_type: type, x: float, y: float,
     return resampled
 
 
-def resample_path(path: list[S], velocity: float = 3.0, angular_vel: float = math.pi) -> list[S]:
+def resample_path(path: list[S], velocity: float = 3.0, angular_vel: float = math.pi / 2) -> list[S]:
     """
     Resample a path at uniform arc-length intervals so the animation
     moves at a constant `velocity` (m/s), assuming DT seconds per frame.
@@ -155,6 +155,7 @@ def resample_path(path: list[S], velocity: float = 3.0, angular_vel: float = mat
             end = isolate_rotation(path, i - 1)
             x, y, *a_start = path[i - 1]
             _, _, *a_end = path[end - 1]
+
             rot_states = resample_rotation(type(path[0]), x, y, a_start, a_end, angular_vel)
             # skip the first state (already in resampled)
             resampled.extend(rot_states[1:])
