@@ -15,7 +15,7 @@ def draw_frame(
     path: list[S] | None = None,
     visited_xy: list[tuple[float, float]] | None = None,
 ) -> None:
-    surface.fill(cfg.WHITE)
+    # surface.fill(cfg.WHITE)
 
     draw_grid(environment, surface)
 

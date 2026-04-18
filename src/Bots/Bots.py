@@ -119,12 +119,14 @@ class Bot(Protocol[S]):
         """
         ...
 
-    def propagate(self, state: S, spacing: float, steering_granularity: int) -> list[list[S]]:
+    def propagate(self, state: S, spacing: float, angular_spacing: float, steering_granularity: int) -> list[list[S]]:
         """
         Generate one trajectory per sampled control input.
 
         Each trajectory is long enough that its XY displacement covers at least
         `spacing` meters, so every primitive lands in a new grid cell.
+        Turning primitives are additionally lengthened so that heading changes by
+        at least `angular_spacing` radians, ensuring they land in a distinct heading bin.
         `steering_granularity` controls how many steering/omega values are
         sampled between 0 and max on each side (e.g. 3 → [-max, -2/3, -1/3, 0, 1/3, 2/3, max]).
         """
@@ -172,11 +174,12 @@ class PointBot:
             ys = np.linspace(start.y, goal.y, n_points)
             return [PointState(x, y) for x, y in zip(xs, ys)]
 
-    def propagate(self, state: PointState, spacing: float, steering_granularity: int) -> list[list[PointState]]:
+    def propagate(self, state: PointState, spacing: float, angular_spacing: float, steering_granularity: int) -> list[list[PointState]]:
         step = self.SPEED * DT
         # For a point bot, every direction displaces equally (step per tick).
         # n_steps so that diagonal displacement per axis >= spacing:
         # diagonal per-axis = n * step / sqrt(2) >= spacing → n >= spacing * sqrt(2) / step
+        # angular_spacing is unused — point bot has no heading.
         n_steps = max(1, math.ceil(spacing * math.sqrt(2) / step))
         trajectories = []
         for dx, dy in [(-1,-1),(-1,0),(-1,1),(0,-1),(0,1),(1,-1),(1,0),(1,1)]:
@@ -292,7 +295,7 @@ class DiffBot:
         states.append(goal)
         return states
 
-    def propagate(self, state: DiffState, spacing: float, steering_granularity: int) -> list[list[DiffState]]:
+    def propagate(self, state: DiffState, spacing: float, angular_spacing: float, steering_granularity: int) -> list[list[DiffState]]:
         omegas = [
             self.OMEGA_MAX * i / steering_granularity
             for i in range(-steering_granularity, steering_granularity + 1)
@@ -300,14 +303,19 @@ class DiffBot:
         trajectories = []
         for v in (self.SPEED, -self.SPEED):
             for omega in omegas:
-                n_steps = _n_steps_for_control(spacing, v, omega, DT)
+                n_xy = _n_steps_for_control(spacing, v, omega, DT)
+                # for turning primitives, ensure heading changes by at least one angular bin
+                if abs(omega) > 1e-9:
+                    n_heading = math.ceil(angular_spacing / (abs(omega) * DT))
+                    n_steps = max(n_xy, n_heading)
+                else:
+                    n_steps = n_xy
                 traj: list[DiffState] = [state]
                 for _ in range(n_steps):
                     traj.append(traj[-1].step(v, omega, DT))
-
                 trajectories.append(traj)
         # rotate in place
-        n_rot = max(1, math.ceil(spacing / (self.OMEGA_MAX * DT)))
+        n_rot = max(1, math.ceil(angular_spacing / (self.OMEGA_MAX * DT)))
         for omega in (-self.OMEGA_MAX, self.OMEGA_MAX):
             traj = [state]
             for _ in range(n_rot):
@@ -335,7 +343,7 @@ class DiffBot:
 class CarBot:
     """Ackermann steering (car-like) robot. Non-holonomic; minimum turning radius determined by MAX_STEER."""
 
-    SPEED           = 1.0
+    SPEED           = 5.0
     MAX_STEER       = math.radians(45)
     TERMINAL_RADIUS = 10.0
 
@@ -362,9 +370,12 @@ class CarBot:
         return center_distance(state, goal) < self.TERMINAL_RADIUS
 
     def heuristic(self, state: CarState, goal: CarState) -> float:
-        q0 = (state.rear_axle_x, state.rear_axle_y, state.heading_rad)
-        q1 = (goal.rear_axle_x,  goal.rear_axle_y,  goal.heading_rad)
-        return reeds_shepp.path_length(q0, q1, self.turning_radius)
+        # TODO: SWITCH BACK TO REEDS_SHEPP ONCE DONE EXPERIMENTING
+
+        # q0 = (state.rear_axle_x, state.rear_axle_y, state.heading_rad)
+        # q1 = (goal.rear_axle_x,  goal.rear_axle_y,  goal.heading_rad)
+        # return reeds_shepp.path_length(q0, q1, self.turning_radius)
+        return center_distance(state, goal)
 
     def at_goal(self, state: CarState, goal: CarState) -> bool:
         return (
@@ -379,7 +390,7 @@ class CarBot:
         raw = reeds_shepp.path_sample(q0, q1, self.turning_radius, resolution)
         return [CarState(r[0], r[1], r[2]) for r in raw] if raw else None
 
-    def propagate(self, state: CarState, spacing: float, steering_granularity: int) -> list[list[CarState]]:
+    def propagate(self, state: CarState, spacing: float, angular_spacing: float, steering_granularity: int) -> list[list[CarState]]:
         deltas = [
             self.MAX_STEER * i / steering_granularity
             for i in range(-steering_granularity, steering_granularity + 1)
@@ -388,7 +399,12 @@ class CarBot:
         for v in (self.SPEED, -self.SPEED):
             for delta in deltas:
                 omega = v * math.tan(delta) / self.wheelbase if delta != 0 else 0.0
-                n_steps = _n_steps_for_control(spacing, v, omega, DT)
+                n_xy = _n_steps_for_control(spacing, v, omega, DT)
+                if abs(omega) > 1e-9:
+                    n_heading = math.ceil(angular_spacing / (abs(omega) * DT))
+                    n_steps = max(n_xy, n_heading)
+                else:
+                    n_steps = n_xy
                 traj: list[CarState] = [state]
                 for _ in range(n_steps):
                     traj.append(traj[-1].step(v, delta, self.wheelbase, DT))
@@ -499,7 +515,7 @@ class TrailerBot:
 
         return states
 
-    def propagate(self, state: TrailerState, spacing: float, steering_granularity: int) -> list[list[TrailerState]]:
+    def propagate(self, state: TrailerState, spacing: float, angular_spacing: float, steering_granularity: int) -> list[list[TrailerState]]:
         deltas = [
             self.MAX_STEER * i / steering_granularity
             for i in range(-steering_granularity, steering_granularity + 1)
@@ -508,7 +524,12 @@ class TrailerBot:
         for v in (self.SPEED, -self.SPEED):
             for delta in deltas:
                 omega = v * math.tan(delta) / self.wheelbase if delta != 0 else 0.0
-                n_steps = _n_steps_for_control(spacing, v, omega, DT)
+                n_xy = _n_steps_for_control(spacing, v, omega, DT)
+                if abs(omega) > 1e-9:
+                    n_heading = math.ceil(angular_spacing / (abs(omega) * DT))
+                    n_steps = max(n_xy, n_heading)
+                else:
+                    n_steps = n_xy
                 traj: list[TrailerState] = [state]
                 for _ in range(n_steps):
                     traj.append(traj[-1].step(v, delta, self.wheelbase, self.hitch_distance, DT))

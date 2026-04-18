@@ -55,9 +55,9 @@ class ObstacleEnvironment:
 
         self.obstacles = STRtree(polys)
 
-        x, y = grid_shape
+        rows, cols = grid_shape
 
-        self.enclosure_geom = box(0,0, x * cell_size_meters, y * cell_size_meters)
+        self.enclosure_geom = box(0,0, cols * cell_size_meters, rows * cell_size_meters)
 
 
 
@@ -76,7 +76,7 @@ class ObstacleEnvironment:
 
         if 0 <= cy < self.grid.shape[0] and 0 <= cx < self.grid.shape[1]:
             return self.grid[cy][cx] == 0
-        
+
         return False
 
     def is_valid_state(self, bot_geoms: list[BaseGeometry]) -> bool:

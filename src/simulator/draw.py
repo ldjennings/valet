@@ -69,5 +69,6 @@ def draw_grid(
     obstacles: ObstacleEnvironment,
     screen: pygame.Surface,
 ) -> None:
+    draw_shape(screen, obstacles.enclosure_geom, cfg.WHITE, True, cfg.RED)
     for g in obstacles.obstacles.geometries:
         draw_shape(screen, g, cfg.BLACK, True, cfg.GRAY)

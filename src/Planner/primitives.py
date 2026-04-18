@@ -58,10 +58,10 @@ def propagated_primitives(bot: Bot, state: S, config: HybridConfig, steering_gra
     """
     Call bot.propagate() and wrap each trajectory into a Primitive with arc-length cost.
     Each bot internally computes per-control n_steps so every primitive displaces
-    at least `config.spacing` in XY.
+    at least `config.spacing` in XY and turns at least `config.angular_spacing` in heading.
     """
     primitives = []
-    for traj in bot.propagate(state, config.spacing, steering_granularity):
+    for traj in bot.propagate(state, config.spacing, config.angular_spacing, steering_granularity):
         cost = _arc_length(traj)
         if config.reverse_cost > 0 and _is_reverse(traj):
             cost += config.reverse_cost

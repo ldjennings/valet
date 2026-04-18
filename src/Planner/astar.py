@@ -111,17 +111,25 @@ def smooth_path(
 
 
 def discretize(state: S, config: HybridConfig) -> NodeKey:
+    """
+    Map a continuous state to a discrete grid cell for A* visited/g_score tracking.
+
+    XY is rounded to the nearest spacing multiple.  Headings use floor + modulo
+    so that 0 and 2π map to the same bin (round would create a spurious extra bin).
+    """
     x, y, *rest = state
     key: NodeKey = (round(x / config.spacing), round(y / config.spacing))
 
     if rest:
-        heading = rest[0] % (2 * math.pi)   # normalize to [0, 2π)
-        key += (round(heading / config.angular_spacing),)
+        n_heading_bins = round(2 * math.pi / config.angular_spacing)
+        heading = rest[0] % (2 * math.pi)
+        key += (int(heading / config.angular_spacing) % n_heading_bins,)
 
     if len(rest) > 1:
         trailer_res = config.trailer_spacing if config.trailer_spacing is not None else config.angular_spacing
-        trailer_heading = rest[1] % (2 * math.pi)   # normalize to [0, 2π)
-        key += (round(trailer_heading / trailer_res),)
+        n_trailer_bins = round(2 * math.pi / trailer_res)
+        trailer_heading = rest[1] % (2 * math.pi)
+        key += (int(trailer_heading / trailer_res) % n_trailer_bins,)
 
     return key
 
