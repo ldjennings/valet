@@ -8,7 +8,6 @@ from simulator.render import Renderer
 from Bots import BotBundle, make_bot, S
 from Planner.astar import hybrid_astar
 from Planner.AstarConfig import GridConfig, HybridConfig
-from Planner.primitives import PrimitiveTable
 
 
 
@@ -33,7 +32,6 @@ def run(
     environment: ObstacleEnvironment,
     manual: bool = False,
     record: bool = False,
-    lattice_config: GridConfig = GridConfig()
 ):
     ## Initializing Variables ##
     recorder        = MP4Recorder() if record else NoOpRecorder()   # screen recorder, no-ops unless render is true
@@ -53,9 +51,7 @@ def run(
 
     # calculate path planning before loop
     if not manual:
-        result = hybrid_astar(environment, bot, state, goal, HybridConfig(), debug=True)
-        # prims = PrimitiveTable(bot, GridConfig())
-        # result = lattice_astar(environment, bot, state, goal, GridConfig(), prims,debug=True)
+        result = hybrid_astar(environment, bot, state, goal, HybridConfig(fine_collision=False), debug=True)
         path = result.path
         visited_xy = result.visited_xy or None
         if path is None:

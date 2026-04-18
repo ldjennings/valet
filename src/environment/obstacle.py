@@ -73,8 +73,10 @@ class ObstacleEnvironment:
         if not (0 <= x <= self.enclosure_geom.bounds[2] and 0 <= y <= self.enclosure_geom.bounds[3]):
             return False
         cx, cy = int(x // self.cell_size), int(y // self.cell_size)
+
         if 0 <= cy < self.grid.shape[0] and 0 <= cx < self.grid.shape[1]:
             return self.grid[cy][cx] == 0
+        
         return False
 
     def is_valid_state(self, bot_geoms: list[BaseGeometry]) -> bool:
@@ -83,6 +85,3 @@ class ObstacleEnvironment:
             not intersects_any(self.obstacles, g) and self.enclosure_geom.contains(g)
             for g in bot_geoms
         )
-
-
-

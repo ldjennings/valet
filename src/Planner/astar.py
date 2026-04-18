@@ -1,6 +1,6 @@
 from environment.obstacle import ObstacleEnvironment
 from Bots import S, Bot, TrailerBot
-from Planner.primitives import PrimitiveTable, propagated_primitives
+from Planner.primitives import propagated_primitives
 from .AstarConfig import GridConfig, HybridConfig
 import heapq
 from dataclasses import dataclass, field
@@ -62,15 +62,13 @@ def validate_path(
     if not obstacles.is_valid_state(bot.footprint(path[-1])):
         return False
 
-    if not fine:
-        return True
-
-    # Phase 2: fill in remaining states.
-    for i in range(len(path)):
-        if i % coarse_step == 0:
-            continue
-        if not obstacles.is_valid_state(bot.footprint(path[i])):
-            return False
+    if fine:
+        # Phase 2: fill in remaining states.
+        for i in range(len(path)):
+            if i % coarse_step == 0:
+                continue
+            if not obstacles.is_valid_state(bot.footprint(path[i])):
+                return False
 
     return True
 
