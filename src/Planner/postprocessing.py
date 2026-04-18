@@ -89,32 +89,36 @@ def isolate_rotation(path: list[S], start: int) -> int:
     return end
 
 
-def resample_rotation(state_type: type, x: float, y: float,
-                      angles_start: list[float], angles_end: list[float],
-                      angular_vel: float) -> list[S]:
+def resample_rotation(segment: list[S], angular_vel: float) -> list[S]:
     """
-    Interpolate each angle component independently from angles_start to
-    angles_end at `angular_vel` rad/s, with position fixed at (x, y).
+    Resample a pure-rotation segment (no XY movement) at `angular_vel` rad/s.
 
-    The number of output steps is determined by whichever angle has the
-    largest total change. Angles that finish rotating earlier hold their
-    final value for the remaining steps.
+    Each angle component is interpolated independently from the first state's
+    angles to the last state's angles. The number of output steps is determined
+    by whichever angle has the largest total change. Angles that finish rotating
+    earlier hold their final value for the remaining steps.
     """
-    if not angles_start:
-        return [state_type(x, y)]
+    if len(segment) < 2:
+        return list(segment)
+
+    x, y, *a_start = segment[0]
+    _, _, *a_end = segment[-1]
+
+    if not a_start:
+        return [segment[0], segment[-1]]
 
     angular_step = angular_vel * DT
-    deltas = [_wrapped_delta(ai, aj) for ai, aj in zip(angles_start, angles_end)]
+    deltas = [_wrapped_delta(ai, aj) for ai, aj in zip(a_start, a_end)]
 
     # per-angle step counts (how many frames each angle needs independently)
     per_angle_steps = [max(1, math.ceil(abs(d) / angular_step)) for d in deltas]
     n_steps = max(per_angle_steps)
 
+    state_type = type(segment[0])
     resampled: list[S] = []
     for k in range(n_steps + 1):
         angles = []
-        for ai, di, ni in zip(angles_start, deltas, per_angle_steps):
-            # this angle's own interpolation parameter, clamped at 1.0
+        for ai, di, ni in zip(a_start, deltas, per_angle_steps):
             t = min(k / ni, 1.0)
             angles.append(ai + t * di)
         resampled.append(state_type(x, y, *angles))
@@ -153,10 +157,7 @@ def resample_path(path: list[S], velocity: float = 3.0, angular_vel: float = mat
         if seg_len < 1e-12:
             # pure rotation — isolate the segment, resample each angle independently
             end = isolate_rotation(path, i - 1)
-            x, y, *a_start = path[i - 1]
-            _, _, *a_end = path[end - 1]
-
-            rot_states = resample_rotation(type(path[0]), x, y, a_start, a_end, angular_vel)
+            rot_states = resample_rotation(path[i - 1:end], angular_vel)
             # skip the first state (already in resampled)
             resampled.extend(rot_states[1:])
             carry = 0.0
