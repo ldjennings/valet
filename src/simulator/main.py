@@ -1,17 +1,9 @@
-import warnings
-warnings.filterwarnings("ignore", category=UserWarning, module="pkg_resources")
 
 import simulator.config as cfg
-from simulator.recorder import MP4Recorder, NoOpRecorder
+from simulator import MP4Recorder, NoOpRecorder, Renderer, BotBundle, make_bot
 from environment import ObstacleEnvironment
-from simulator.render import Renderer
-from Bots import BotBundle, make_bot, S
-from Planner.astar import hybrid_astar
-from Planner.AstarConfig import HybridConfig
-
-
-
-
+from Planner import hybrid_astar, HybridConfig
+from Bots import S
 
 import argparse
 import pygame
@@ -30,6 +22,7 @@ def init_pygame(bundle: BotBundle, env: ObstacleEnvironment) -> tuple[Renderer, 
 def run(
     bundle: BotBundle[S],
     environment: ObstacleEnvironment,
+    config: HybridConfig = HybridConfig(),
     manual: bool = False,
     record: bool = False,
 ):
@@ -51,7 +44,7 @@ def run(
 
     # calculate path planning before loop
     if not manual:
-        result = hybrid_astar(environment, bot, state, goal, HybridConfig(fine_collision=False), debug=True)
+        result = hybrid_astar(environment, bot, state, goal, config, debug=True)
         path = result.path
         visited_xy = result.visited_xy or None
         if path is None:
@@ -139,13 +132,14 @@ def main() -> None:
 
     (sr, sc), (gr, gc) = start_goal[args.bot_type]
     startxy = grid_to_coords(sr, sc)
-    goalxy  = grid_to_coords(cfg.NUM_ROWS + gr, cfg.NUM_COLS + gc)
-
+    goalxy  = grid_to_coords(cfg.NUM_COLS + gr, cfg.NUM_ROWS + gc)
 
     bundle = make_bot(args.bot_type, startxy, goalxy)
     environment = ObstacleEnvironment((cfg.NUM_ROWS, cfg.NUM_COLS), cfg.CELLS_TO_METERS, 0.0, trailer)
 
-    run(bundle, environment, args.manual, args.record)
+    conf = HybridConfig(spacing=0.3, fine_collision=False)
+
+    run(bundle, environment,conf, args.manual, args.record)
 
 
 if __name__ == "__main__":
