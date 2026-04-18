@@ -1,7 +1,8 @@
 from environment.obstacle import ObstacleEnvironment
-from Bots import S, Bot, TrailerBot
-from Planner.primitives import propagated_primitives
-from .AstarConfig import HybridConfig
+from Bots import S, Bot
+from Planner.Primitive import propagated_primitives
+from Planner.postprocessing import smooth_path, resample_path
+from Planner.AstarConfig import HybridConfig
 import heapq
 from dataclasses import dataclass, field
 from typing import Generic
@@ -48,13 +49,14 @@ def validate_path(
     coarse_step: int = 4, fine: bool = True,
 ) -> bool:
     # Phase 1: Check sparse subset (endpoint + every Nth).
+    # Uses approximate (cached) footprints for speed during search.
 
     # always check last state
-    if not obstacles.is_valid_state(bot.footprint(path[-1])):
+    if not obstacles.is_valid_state(bot.footprint(path[-1], approximate=fine)):
         return False
 
     for i in range(0, len(path), coarse_step):
-        if not obstacles.is_valid_state(bot.footprint(path[i])):
+        if not obstacles.is_valid_state(bot.footprint(path[i], approximate=fine)):
             return False
 
     if fine:
@@ -62,52 +64,10 @@ def validate_path(
         for i in range(len(path)):
             if i % coarse_step == 0:
                 continue
-            if not obstacles.is_valid_state(bot.footprint(path[i])):
+            if not obstacles.is_valid_state(bot.footprint(path[i], approximate=fine)):
                 return False
 
     return True
-
-
-def smooth_path(
-        path: list[S],
-        bot: Bot,
-        obstacles: ObstacleEnvironment,
-        iterations: int = 100,
-    ) -> list[S]:
-    """
-    Probabilistic path shortcutting. Repeatedly picks two random indices, attempts
-    a direct connection via bot.generate_trajectory, and replaces the span if the
-    shortcut is collision-free. Skipped entirely for TrailerBot since
-    generate_trajectory ignores the trailer heading.
-    """
-    if isinstance(bot, TrailerBot):
-        return path
-
-    import random
-    path = list(path)
-    initial_len = len(path)
-    shortcuts_applied = 0
-
-    for i in range(iterations):
-        if len(path) < 3:
-            print(f"[smooth_path] path too short to shorten further, stopping at iteration {i}")
-            break
-
-        a = random.randint(0, len(path) - 2)
-        b = random.randint(a + 1, len(path) - 1)
-
-        shortcut = bot.generate_trajectory(path[a], path[b])
-        if shortcut is None:
-            continue
-
-        if validate_path(obstacles, bot, shortcut):
-            path = path[:a] + shortcut + path[b + 1:]
-            shortcuts_applied += 1
-
-    print(f"[smooth_path] {iterations} iterations | {shortcuts_applied} shortcuts applied | "
-          f"{initial_len} -> {len(path)} states")
-
-    return path
 
 
 def discretize(state: S, config: HybridConfig) -> NodeKey:
@@ -199,8 +159,9 @@ def hybrid_astar(
                 print(f"[hybrid_astar] found path: {len(visited)} expansions, "
                     f"{len(reconstruct_path(node, attempted_path))} states")
 
+                raw_path = smooth_path(reconstruct_path(node, attempted_path), bot, env)
                 return PlanResult(
-                    path=reconstruct_path(node, attempted_path),
+                    path=resample_path(raw_path),
                     visited_xy=visited_xy,
                 )
 

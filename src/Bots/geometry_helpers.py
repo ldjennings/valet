@@ -9,7 +9,7 @@ Base shapes (rectangles, circles) are built once via make_*_base() and cached
 by the bot instance. Per-state footprint calls only rotate + translate.
 """
 
-from Bots.BotState import PointState, DiffState, CarState, TrailerState
+from Bots.BotState import PointState, TrailerState
 
 import math
 from shapely.affinity import rotate, translate
@@ -37,10 +37,29 @@ def make_axle_rect_base(wheelbase: float, length: float, width: float) -> BaseGe
     return translate(rect, xoff=offset)
 
 
-# ── per-state placement (rotate + translate only) ────────────────────────
+# ── heading cache ─────────────────────────────────────────────────────────
+
+HEADING_CACHE_SIZE = 72  # one slot per 5°; good enough for collision checking
+
+def build_heading_cache(base: BaseGeometry) -> list[BaseGeometry]:
+    """Pre-rotate base shape at HEADING_CACHE_SIZE evenly-spaced headings."""
+    return [
+        rotate(base, math.degrees(i * 2 * math.pi / HEADING_CACHE_SIZE), origin=(0, 0))
+        for i in range(HEADING_CACHE_SIZE)
+    ]
+
+
+def _lookup(cache: list[BaseGeometry], heading_rad: float) -> BaseGeometry:
+    """Find the closest pre-rotated shape for a given heading."""
+    idx = round(heading_rad % (2 * math.pi) / (2 * math.pi) * HEADING_CACHE_SIZE) % HEADING_CACHE_SIZE
+    return cache[idx]
+
+
+# ── per-state placement (translate only, rotation is cached) ──────────────
 
 def place(base: BaseGeometry, x: float, y: float, angle_rad: float) -> BaseGeometry:
-    """Rotate base shape by angle_rad about origin, then translate to (x, y)."""
+    """Rotate base shape by angle_rad about origin, then translate to (x, y).
+    Used only for rendering (exact heading); collision checking uses the cache."""
     return translate(rotate(base, math.degrees(angle_rad), origin=(0, 0)), xoff=x, yoff=y)
 
 
@@ -49,33 +68,39 @@ def point_geom(base: BaseGeometry, state: PointState) -> BaseGeometry:
     return translate(base, xoff=x, yoff=y)
 
 
-def diff_geom(base: BaseGeometry, state: DiffState) -> BaseGeometry:
-    x, y, heading_rad = state
-    return place(base, x, y, heading_rad)
-
-
-def car_geom(base: BaseGeometry, state: CarState) -> BaseGeometry:
-    x, y, heading_rad = state
-    return place(base, x, y, heading_rad)
+def cached_geom(cache: list[BaseGeometry], x: float, y: float, heading_rad: float) -> BaseGeometry:
+    """Look up the nearest pre-rotated shape and translate to (x, y)."""
+    return translate(_lookup(cache, heading_rad), xoff=x, yoff=y)
 
 
 def truck_trailer_geom(
     truck_base: BaseGeometry, trailer_base: BaseGeometry,
     state: TrailerState, hitch_distance: float,
+    truck_cache: list[BaseGeometry] | None = None,
+    trailer_cache: list[BaseGeometry] | None = None,
+    approximate: bool = False,
 ) -> list[BaseGeometry]:
     """
     Returns [connection, truck, trailer] as separate geometries.
 
     hitch_distance: distance from hitch point (rear axle) to trailer axle center.
+    If approximate=True, uses pre-rotated caches instead of exact rotation.
     """
     x, y, truck_heading, trailer_heading = state
 
-    truck = place(truck_base, x, y, truck_heading)
+    if approximate and truck_cache is not None and trailer_cache is not None:
+        truck = cached_geom(truck_cache, x, y, truck_heading)
+    else:
+        truck = place(truck_base, x, y, truck_heading)
 
     x_t = x - hitch_distance * math.cos(trailer_heading)
     y_t = y - hitch_distance * math.sin(trailer_heading)
 
-    trailer = place(trailer_base, x_t, y_t, trailer_heading)
+    if approximate and truck_cache is not None and trailer_cache is not None:
+        trailer = cached_geom(trailer_cache, x_t, y_t, trailer_heading)
+    else:
+        trailer = place(trailer_base, x_t, y_t, trailer_heading)
+
     connection = LineString([(x, y), (x_t, y_t)])
 
     return [connection, truck, trailer]

@@ -2,8 +2,9 @@ import math
 
 # screen/environment stuff
 NUM_ROWS, NUM_COLS = 12, 12
-CELL_SIZE = 15
-NUM_ENEMIES = 100
+# NUM_ROWS, NUM_COLS = 4, 6
+# CELL_SIZE = 15
+# NUM_ENEMIES = 100
 VIRTUAL_SIZE = (800, 800)
 
 # Conversion factors
@@ -16,7 +17,7 @@ METERS_TO_PIXELS = min(
 
 GOAL_RADIUS_TOLERANCE: float = 0.25
 GOAL_HEADING_TOLERANCE: float = math.pi / 12
-TRAILER_HEADING_TOLERANCE: float = math.pi / 64
+TRAILER_HEADING_TOLERANCE: float = math.pi / 48
 
 
 # differential drive robot dimensions

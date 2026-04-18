@@ -21,8 +21,9 @@ from Bots.BotState import (
     angle_distance_rad,
 )
 from Bots.geometry_helpers import (
-    point_geom, diff_geom, car_geom, truck_trailer_geom,
+    point_geom, place, cached_geom, truck_trailer_geom,
     make_point_base, make_centered_rect_base, make_axle_rect_base,
+    build_heading_cache,
 )
 
 import math
@@ -73,8 +74,9 @@ class Bot(Protocol[S]):
         """Planning speed in m/s. Used by propagated_primitives to scale arc length to grid spacing."""
         ...
 
-    def footprint(self, state: S) -> list[BaseGeometry]:
-        """Returns the robot's collision geometries at the given state as a list of Shapely objects."""
+    def footprint(self, state: S, approximate: bool = False) -> list[BaseGeometry]:
+        """Returns the robot's collision geometries at the given state as a list of Shapely objects.
+        If approximate=True, uses a cached rotation (snapped to nearest 5°) for speed."""
         ...
 
     def generate_trajectory(self, start: S, goal: S, resolution: float = 0.1) -> list[S] | None:
@@ -144,7 +146,7 @@ class Bot(Protocol[S]):
 class PointBot:
     """Holonomic point robot. Can move in any direction; no heading or turning constraints."""
 
-    SPEED           = 1.0
+    SPEED           = 7.5
     TERMINAL_RADIUS = 1.0
 
     def __init__(self, goal_radius_tol: float = 0.25):
@@ -153,7 +155,7 @@ class PointBot:
 
     def speed(self) -> float: return self.SPEED
 
-    def footprint(self, state: PointState) -> list[BaseGeometry]:
+    def footprint(self, state: PointState, approximate: bool = False) -> list[BaseGeometry]:
         return [point_geom(self._base, state)]
 
     def is_terminal(self, state: PointState, goal: PointState) -> bool:
@@ -216,7 +218,7 @@ class PointBot:
 class DiffBot:
     """Differential drive robot. Can rotate in place; forward/backward and in-place turning."""
 
-    SPEED           = 10.0
+    SPEED           = 7.5
     OMEGA_MAX       = math.pi / 2      # rad/s
     TERMINAL_RADIUS = 2.0
 
@@ -230,11 +232,14 @@ class DiffBot:
         self.goal_radius_tol = goal_radius_tol
         self.goal_heading_tol = goal_heading_tol
         self._base = make_centered_rect_base(length, width)
+        self._cache = build_heading_cache(self._base)
 
     def speed(self) -> float: return self.SPEED
 
-    def footprint(self, state: DiffState) -> list[BaseGeometry]:
-        return [diff_geom(self._base, state)]
+    def footprint(self, state: DiffState, approximate: bool = False) -> list[BaseGeometry]:
+        if approximate:
+            return [cached_geom(self._cache, state.center_x, state.center_y, state.heading_rad)]
+        return [place(self._base, state.center_x, state.center_y, state.heading_rad)]
 
     def is_terminal(self, state: DiffState, goal: DiffState) -> bool:
         return center_distance(state, goal) < self.TERMINAL_RADIUS
@@ -343,7 +348,7 @@ class DiffBot:
 class CarBot:
     """Ackermann steering (car-like) robot. Non-holonomic; minimum turning radius determined by MAX_STEER."""
 
-    SPEED           = 5.0
+    SPEED           = 7.5
     MAX_STEER       = math.radians(45)
     TERMINAL_RADIUS = 10.0
 
@@ -360,11 +365,14 @@ class CarBot:
         self.goal_radius_tol = goal_radius_tol
         self.goal_heading_tol = goal_heading_tol
         self._base = make_axle_rect_base(wheelbase, length, width)
+        self._cache = build_heading_cache(self._base)
 
     def speed(self) -> float: return self.SPEED
 
-    def footprint(self, state: CarState) -> list[BaseGeometry]:
-        return [car_geom(self._base, state)]
+    def footprint(self, state: CarState, approximate: bool = False) -> list[BaseGeometry]:
+        if approximate:
+            return [cached_geom(self._cache, state.rear_axle_x, state.rear_axle_y, state.heading_rad)]
+        return [place(self._base, state.rear_axle_x, state.rear_axle_y, state.heading_rad)]
 
     def is_terminal(self, state: CarState, goal: CarState) -> bool:
         return center_distance(state, goal) < self.TERMINAL_RADIUS
@@ -462,20 +470,26 @@ class TrailerBot:
         self.trailer_heading_tol = trailer_heading_tol
         self._truck_base = make_axle_rect_base(wheelbase, length, width)
         self._trailer_base = make_centered_rect_base(trailer_length, trailer_width)
+        self._truck_cache = build_heading_cache(self._truck_base)
+        self._trailer_cache = build_heading_cache(self._trailer_base)
 
     def speed(self) -> float: return self.SPEED
 
-    def footprint(self, state: TrailerState) -> list[BaseGeometry]:
-        return truck_trailer_geom(self._truck_base, self._trailer_base, state, self.hitch_distance)
+    def footprint(self, state: TrailerState, approximate: bool = False) -> list[BaseGeometry]:
+        return truck_trailer_geom(
+            self._truck_base, self._trailer_base, state, self.hitch_distance,
+            self._truck_cache, self._trailer_cache, approximate,
+        )
 
     def is_terminal(self, state: TrailerState, goal: TrailerState) -> bool:
         return center_distance(state, goal) < self.TERMINAL_RADIUS
 
     def heuristic(self, state: TrailerState, goal: TrailerState) -> float:
         # RS on the truck state only — trailer heading is handled by generate_trajectory
-        q0 = (state.rear_axle_x, state.rear_axle_y, state.heading_rad)
-        q1 = (goal.rear_axle_x,  goal.rear_axle_y,  goal.heading_rad)
-        return reeds_shepp.path_length(q0, q1, self.turning_radius)
+        # q0 = (state.rear_axle_x, state.rear_axle_y, state.heading_rad)
+        # q1 = (goal.rear_axle_x,  goal.rear_axle_y,  goal.heading_rad)
+        # return reeds_shepp.path_length(q0, q1, self.turning_radius)
+        return center_distance(state, goal)
 
     def at_goal(self, state: TrailerState, goal: TrailerState) -> bool:
         return (

@@ -7,6 +7,7 @@ from Bots import S
 
 import argparse
 import pygame
+import math
 
 
 
@@ -70,10 +71,13 @@ def run(
 
 
         renderer.render(state, path, visited_xy)
-        recorder.capture(renderer.screen)
+        if path: # only record frames if there's actually an animation to show
+            recorder.capture(renderer.screen)
+
         clock.tick(30)
 
-    recorder.save()
+    if path: # only save recording if there was actually an animation
+        recorder.save()
 
 # helper method for initial positions
 def grid_to_coords(x_cell, y_cell, center=True) -> tuple[float, float]:
@@ -123,7 +127,7 @@ def main() -> None:
     start_goal = {
         "point":   ((0, 0),     (-3.5, -1)),
         "diff":    ((0, 0),     (-3.5, -1)),
-        "car":     ((0.5, 0),   (-3.575, -1)),
+        "car":     ((0.5, 0),   (-3.575, -1.35)),
         "trailer": ((2, 0),     (-4, -1)),
     }
 
@@ -135,9 +139,9 @@ def main() -> None:
     goalxy  = grid_to_coords(cfg.NUM_COLS + gr, cfg.NUM_ROWS + gc)
 
     bundle = make_bot(args.bot_type, startxy, goalxy)
-    environment = ObstacleEnvironment((cfg.NUM_ROWS, cfg.NUM_COLS), cfg.CELLS_TO_METERS, 0.0, trailer)
+    environment = ObstacleEnvironment((cfg.NUM_ROWS, cfg.NUM_COLS), cfg.CELLS_TO_METERS, 0.1, trailer)
 
-    conf = HybridConfig(spacing=0.3, fine_collision=False)
+    conf = HybridConfig(spacing=1, angular_spacing= math.pi / 3,fine_collision=False)
 
     run(bundle, environment,conf, args.manual, args.record)
 
