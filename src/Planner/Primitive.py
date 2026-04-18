@@ -1,4 +1,5 @@
 from Bots import S, Bot
+from utils import wrap_angle
 from typing import Generic
 from dataclasses import dataclass
 from Planner.AstarConfig import HybridConfig
@@ -38,7 +39,7 @@ def _arc_length(traj: list) -> float:
         x2, y2, *rest2 = s2
         total += math.hypot(x2 - x1, y2 - y1)
         if rest1 and rest2:
-            total += abs((rest1[0] - rest2[0] + math.pi) % (2 * math.pi) - math.pi) * ROTATION_COST_WEIGHT
+            total += abs(wrap_angle(rest1[0] - rest2[0])) * ROTATION_COST_WEIGHT
     return total
 
 
@@ -46,8 +47,10 @@ def _is_reverse(traj: list) -> bool:
     """True if the primitive moves opposite to the starting heading (reverse gear)."""
     x1, y1, *rest = traj[0]
     x2, y2, *_    = traj[1]
+
     if not rest:
         return False  # PointBot has no heading
+
     dx, dy = x2 - x1, y2 - y1
     if math.hypot(dx, dy) < 1e-6:
         return False  # pure rotation, not reverse

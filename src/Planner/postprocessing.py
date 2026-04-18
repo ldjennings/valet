@@ -9,6 +9,7 @@ import math
 import random
 
 from Bots import S, Bot, TrailerBot
+from utils import angle_difference, angle_distance, center_distance, pos, wrap_angle, lerp_angle
 from environment.obstacle import ObstacleEnvironment
 
 
@@ -66,11 +67,6 @@ def smooth_path(
 DT = 1 / 30  # assumed simulation timestep for velocity calculations
 
 
-def _wrapped_delta(a: float, b: float) -> float:
-    """Signed angular difference from a to b, wrapped to [-π, π]."""
-    return (b - a + math.pi) % (2 * math.pi) - math.pi
-
-
 def isolate_rotation(path: list[S], start: int) -> int:
     """
     Starting at index `start`, scan forward to find the end of the
@@ -108,7 +104,7 @@ def resample_rotation(segment: list[S], angular_vel: float) -> list[S]:
         return [segment[0], segment[-1]]
 
     angular_step = angular_vel * DT
-    deltas = [_wrapped_delta(ai, aj) for ai, aj in zip(a_start, a_end)]
+    deltas = [angle_difference(aj, ai) for ai, aj in zip(a_start, a_end)]
 
     # per-angle step counts (how many frames each angle needs independently)
     per_angle_steps = [max(1, math.ceil(abs(d) / angular_step)) for d in deltas]
@@ -150,9 +146,9 @@ def resample_path(path: list[S], velocity: float = 3.0, angular_vel: float = mat
     i = 1
 
     while i < len(path):
-        x0, y0, *_ = path[i - 1]
-        x1, y1, *_ = path[i]
-        seg_len = math.hypot(x1 - x0, y1 - y0)
+        p0  = pos(path[i - 1])
+        p1  = pos(path[i])
+        seg_len = center_distance(p0, p1)
 
         if seg_len < 1e-12:
             # pure rotation — isolate the segment, resample each angle independently
@@ -171,10 +167,7 @@ def resample_path(path: list[S], velocity: float = 3.0, angular_vel: float = mat
             t = d / seg_len
             x = x0 + t * (x1 - x0)
             y = y0 + t * (y1 - y0)
-            angles = [
-                ai + t * _wrapped_delta(ai, aj)
-                for ai, aj in zip(a0, a1)
-            ]
+            angles = [lerp_angle(ai, aj, t) for ai, aj in zip(a0, a1)]
             resampled.append(type(path[0])(x, y, *angles))
             d += step_size
 
@@ -187,14 +180,16 @@ def resample_path(path: list[S], velocity: float = 3.0, angular_vel: float = mat
     # compute stats on the resampled path
     total_dist = 0.0
     total_heading_change = 0.0
-    has_heading = False
+
+    _, _, *a = resampled[0]
+    has_heading = a is not None
     for j in range(1, len(resampled)):
         x0, y0, *a0 = resampled[j - 1]
         x1, y1, *a1 = resampled[j]
-        total_dist += math.hypot(x1 - x0, y1 - y0)
-        if a0 and a1:
-            has_heading = True
-            total_heading_change += abs((a1[0] - a0[0] + math.pi) % (2 * math.pi) - math.pi)
+        total_dist += center_distance((x0, y0), (x1, y1))
+        
+        if has_heading:
+            total_heading_change += angle_distance(a1[0], a0[0])
 
     n = len(resampled)
     avg_spacing = total_dist / (n - 1) if n > 1 else 0.0

@@ -10,16 +10,14 @@ Robot dimensions and goal tolerances are constructor parameters with sensible
 defaults, so the Bots package has no dependency on simulator.config.
 """
 
-import reeds_shepp
 from Bots.BotState import (
     S,
     PointState,
     DiffState,
     CarState,
     TrailerState,
-    center_distance,
-    angle_distance_rad,
 )
+from utils import angle_difference, center_distance, angle_distance, linspace_angles, linspace_xy, rs_path_sample
 from Bots.geometry_helpers import (
     point_geom, place, cached_geom, truck_trailer_geom,
     make_point_base, make_centered_rect_base, make_axle_rect_base,
@@ -30,7 +28,6 @@ import math
 from typing import Protocol
 from shapely.geometry.base import BaseGeometry
 import pygame
-import numpy as np
 
 # Simulation timestep in seconds. All step() kinematics use this value.
 DT = 1 / 30
@@ -174,11 +171,11 @@ class PointBot:
     def generate_trajectory(
         self, start: PointState, goal: PointState, resolution: float = 0.1
     ) -> list[PointState] | None:
-            dist = np.hypot(goal.x - start.x, goal.y - start.y)
-            n_points = max(2, int(np.ceil(dist / resolution)))
-            xs = np.linspace(start.x, goal.x, n_points)
-            ys = np.linspace(start.y, goal.y, n_points)
-            return [PointState(x, y) for x, y in zip(xs, ys)]
+            # unpack into tuples
+            (x1, y1) = start
+            (x2, y2) = goal
+
+            return [PointState(*p) for p in linspace_xy((x1, y1), (x2, y2), resolution)]
 
     def propagate(self, state: PointState, spacing: float, angular_spacing: float, steering_granularity: int) -> list[list[PointState]]:
         step = self.SPEED * DT
@@ -250,22 +247,29 @@ class DiffBot:
         return center_distance(state, goal) < self.TERMINAL_RADIUS
 
     def heuristic(self, state: DiffState, goal: DiffState) -> float:
-        dx   = goal.center_x - state.center_x
-        dy   = goal.center_y - state.center_y
-        dist = math.hypot(dx, dy)
-        if dist < 1e-3:
-            return 0.0
-        # penalise heading error relative to goal direction — tightens the heuristic
-        # without this, all headings at the same position get equal priority
-        goal_dir      = math.atan2(dy, dx)
-        heading_error = abs(angle_distance_rad(state.heading_rad, goal_dir))
-        return dist + heading_error * 0.5  # 0.5 matches ROTATION_COST_WEIGHT in primitives.py
+
+        # this might have made a benefit before, I dont think its really needed now
+
+        # dx   = goal.center_x - state.center_x
+        # dy   = goal.center_y - state.center_y
+        # dist = math.hypot(dx, dy)
+        # if dist < 1e-3:
+        #     return 0.0
+        # # penalise heading error relative to goal direction — tightens the heuristic
+        # # without this, all headings at the same position get equal priority
+        # goal_dir      = math.atan2(dy, dx)
+        # heading_error = angle_distance(state.heading_rad, goal_dir)
+        # return dist + heading_error * 0.5  # 0.5 matches ROTATION_COST_WEIGHT in primitives.py
+
+        return center_distance(state, goal)
 
     def at_goal(self, state: DiffState, goal: DiffState) -> bool:
         return (
             center_distance(state, goal) < self.goal_radius_tol
-            and abs(angle_distance_rad(state.heading_rad, goal.heading_rad))
-            < self.goal_heading_tol
+
+            and
+
+            angle_distance(state.heading_rad, goal.heading_rad) < self.goal_heading_tol
         )
 
     def generate_trajectory(
@@ -277,34 +281,28 @@ class DiffBot:
         so no accumulation error or overshoot.
         """
         states: list[DiffState] = []
-        sx, sy, sh = start.center_x, start.center_y, start.heading_rad
-        gx, gy, gh = goal.center_x, goal.center_y, goal.heading_rad
-        dist = np.hypot(gx - sx, gy - sy)
+        sx, sy, sh = start
+        gx, gy, gh = goal
 
-        if dist > 1e-3:
+        if center_distance(start, goal) > 1e-3:
             # Phase 1: rotate to face goal
-            target = math.atan2(gy - sy, gx - sx)
-            delta1 = angle_distance_rad(target, sh)
-            n1 = max(2, math.ceil(abs(delta1) / resolution) + 1)
-            for h in np.linspace(sh, sh + delta1, n1):
-                states.append(DiffState(sx, sy, float(h)))
+            angle_to_goal = math.atan2(gy - sy, gx - sx)
+            for a in linspace_angles(sh, angle_to_goal, resolution):
+                states.append(DiffState(sx, sy, a))
 
             # Phase 2: drive straight
-            n2 = max(2, math.ceil(dist / resolution) + 1)
-            for x, y in zip(np.linspace(sx, gx, n2), np.linspace(sy, gy, n2)):
-                states.append(DiffState(float(x), float(y), target))
+            for (x, y) in linspace_xy((sx, sy), (gx, gy), resolution):
+                states.append(DiffState(x, y, angle_to_goal))
 
-            heading_after_drive = target
+            heading_after_drive = angle_to_goal
         else:
             states.append(start)
             heading_after_drive = sh
 
         # Phase 3: rotate to goal heading
-        delta3 = angle_distance_rad(gh, heading_after_drive)
-        if abs(delta3) > 1e-6:
-            n3 = max(2, math.ceil(abs(delta3) / resolution) + 1)
-            for h in np.linspace(heading_after_drive, heading_after_drive + delta3, n3):
-                states.append(DiffState(gx, gy, float(h)))
+        if angle_distance(gh, heading_after_drive) > 1e-6:
+            for a in linspace_angles(heading_after_drive, gh, resolution):
+                states.append(DiffState(gx, gy, a))
 
         return states
 
@@ -388,24 +386,21 @@ class CarBot:
 
     def heuristic(self, state: CarState, goal: CarState) -> float:
         # TODO: SWITCH BACK TO REEDS_SHEPP ONCE DONE EXPERIMENTING
-
-        # q0 = (state.rear_axle_x, state.rear_axle_y, state.heading_rad)
-        # q1 = (goal.rear_axle_x,  goal.rear_axle_y,  goal.heading_rad)
-        # return reeds_shepp.path_length(q0, q1, self.turning_radius)
+        # return rs_path_length(state, goal, self.turning_radius)
         return center_distance(state, goal)
 
     def at_goal(self, state: CarState, goal: CarState) -> bool:
         return (
             center_distance(state, goal) < self.goal_radius_tol
-            and abs(angle_distance_rad(state.heading_rad, goal.heading_rad))
-            < self.goal_heading_tol
+
+            and
+
+            angle_distance(state.heading_rad, goal.heading_rad) < self.goal_heading_tol
         )
 
     def generate_trajectory(self, start: CarState, goal: CarState, resolution: float = 0.1) -> list[CarState] | None:
-        q0  = (start.rear_axle_x, start.rear_axle_y, start.heading_rad)
-        q1  = (goal.rear_axle_x,  goal.rear_axle_y,  goal.heading_rad)
-        raw = reeds_shepp.path_sample(q0, q1, self.turning_radius, resolution)
-        if not raw:
+        raw = rs_path_sample(start, goal, self.turning_radius, resolution)
+        if raw is None:
             return None
         path = [CarState(r[0], r[1], r[2]) for r in raw]
         path.append(goal)
@@ -499,28 +494,26 @@ class TrailerBot:
         return center_distance(state, goal) < self.TERMINAL_RADIUS
 
     def heuristic(self, state: TrailerState, goal: TrailerState) -> float:
-        # RS on the truck state only — trailer heading is handled by generate_trajectory
-        # q0 = (state.rear_axle_x, state.rear_axle_y, state.heading_rad)
-        # q1 = (goal.rear_axle_x,  goal.rear_axle_y,  goal.heading_rad)
-        # return reeds_shepp.path_length(q0, q1, self.turning_radius)
         return center_distance(state, goal)
 
     def at_goal(self, state: TrailerState, goal: TrailerState) -> bool:
         return (
             center_distance(state, goal) < self.goal_radius_tol
-            and abs(angle_distance_rad(state.heading_rad, goal.heading_rad))
-            < self.goal_heading_tol
-            and abs(angle_distance_rad(state.trailer_heading_rad, goal.trailer_heading_rad))
-            < self.trailer_heading_tol
+
+            and
+
+            angle_distance(state.heading_rad, goal.heading_rad) < self.goal_heading_tol
+
+            and
+
+            angle_distance(state.trailer_heading_rad, goal.trailer_heading_rad) < self.trailer_heading_tol
         )
 
     def generate_trajectory(
         self, start: TrailerState, goal: TrailerState, resolution: float = 0.1
     ) -> list[TrailerState] | None:
-        q0  = (start.rear_axle_x, start.rear_axle_y, start.heading_rad)
-        q1  = (goal.rear_axle_x,  goal.rear_axle_y,  goal.heading_rad)
-        raw = reeds_shepp.path_sample(q0, q1, self.turning_radius, resolution)
-        if not raw:
+        raw = rs_path_sample(start, goal, self.turning_radius, resolution)
+        if raw is None:
             return None
 
         JACKKNIFE_LIMIT = math.pi / 2
@@ -534,9 +527,9 @@ class TrailerBot:
             ds           = math.hypot(x - raw[i-1][0], y - raw[i-1][1])
 
             # integrate trailer heading along arc (derived from TrailerState.step kinematics)
-            phi += length_sign * math.sin(angle_distance_rad(theta, phi)) * ds / self.hitch_distance
+            phi += length_sign * math.sin(angle_difference(theta, phi)) * ds / self.hitch_distance
 
-            if abs(angle_distance_rad(theta, phi)) > JACKKNIFE_LIMIT:
+            if angle_distance(theta, phi) > JACKKNIFE_LIMIT:
                 return None
 
             states.append(TrailerState(x, y, theta, phi))

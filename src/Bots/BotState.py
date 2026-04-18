@@ -11,7 +11,6 @@ All states use @dataclass(frozen=True, slots=True):
 
 from dataclasses import dataclass
 from typing import TypeVar
-import numpy as np
 import math
 
 
@@ -144,19 +143,3 @@ class TrailerState:
 # so Bot[PointState] only accepts PointState, Bot[DiffState] only accepts DiffState, etc.
 # This is purely a static analysis tool, no actual runtime existence.
 S = TypeVar("S", PointState, DiffState, CarState, TrailerState)
-
-
-def center_distance(s1: S, s2: S) -> float:
-    """Euclidean distance between the position components of two states."""
-    x1, y1, *_ = s1
-    x2, y2, *_ = s2
-
-    return np.hypot((x2 - x1), (y2 - y1))
-
-
-def angle_distance_rad(a: float, b: float) -> float:
-    """
-    Smallest signed difference between two angles in radians.
-    Range is wrapped to [-pi, pi].
-    """
-    return (a - b + math.pi) % (2 * math.pi) - math.pi
