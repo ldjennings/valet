@@ -75,6 +75,48 @@ def validate_path(
     return True
 
 
+def smooth_path(
+        path: list[S],
+        bot: Bot,
+        obstacles: ObstacleEnvironment,
+        iterations: int = 100,
+    ) -> list[S]:
+    """
+    Probabilistic path shortcutting. Repeatedly picks two random indices, attempts
+    a direct connection via bot.generate_trajectory, and replaces the span if the
+    shortcut is collision-free. Skipped entirely for TrailerBot since
+    generate_trajectory ignores the trailer heading.
+    """
+    if isinstance(bot, TrailerBot):
+        return path
+
+    import random
+    path = list(path)
+    initial_len = len(path)
+    shortcuts_applied = 0
+
+    for i in range(iterations):
+        if len(path) < 3:
+            print(f"[smooth_path] path too short to shorten further, stopping at iteration {i}")
+            break
+
+        a = random.randint(0, len(path) - 2)
+        b = random.randint(a + 1, len(path) - 1)
+
+        shortcut = bot.generate_trajectory(path[a], path[b])
+        if shortcut is None:
+            continue
+
+        if validate_path(obstacles, bot, shortcut):
+            path = path[:a] + shortcut + path[b + 1:]
+            shortcuts_applied += 1
+
+    print(f"[smooth_path] {iterations} iterations | {shortcuts_applied} shortcuts applied | "
+          f"{initial_len} -> {len(path)} states")
+
+    return path
+
+
 def discretize(state: S, config: GridConfig) -> NodeKey:
     x, y, *rest = state
     key: NodeKey = (round(x / config.spacing), round(y / config.spacing))
@@ -89,102 +131,6 @@ def discretize(state: S, config: GridConfig) -> NodeKey:
         key += (round(trailer_heading / trailer_res),)
 
     return key
-
-
-
-
-# only really works with the point robots lmao, was not able to get it working with a Diff
-
-def lattice_astar(
-        env: ObstacleEnvironment,
-        bot: Bot,
-        start: S,
-        goal: S,
-        config: GridConfig,
-        prims: PrimitiveTable,
-        debug: bool = False,
-    ) -> PlanResult[S]:
-
-    LOG_INTERVAL = 500  # print a status line every N expansions
-
-    x0, y0, *_ = start
-    xg, yg, *_ = goal
-    print(f"[lattice_astar] searching from ({x0:.2f}, {y0:.2f}) to ({xg:.2f}, {yg:.2f})")
-
-    start_key = discretize(start, config)
-
-    open_set:   list[SearchNode[S]]         = []
-    g_score:    dict[NodeKey, float]        = {start_key: 0.0}
-    visited:    set[NodeKey]                = set()
-    visited_xy: list[tuple[float, float]]   = []
-
-    heapq.heappush(open_set, SearchNode(
-        f_cost = bot.heuristic(start, goal),
-        g_cost = g_score[start_key],
-        state  = start,
-    ))
-
-
-    while open_set:
-
-        node = heapq.heappop(open_set)
-        current = node.state
-
-        current_key = discretize(current, config)
-        if current_key in visited:
-            continue
-        visited.add(current_key)
-
-        x, y, *_ = current
-        if debug:
-            visited_xy.append((x, y))
-
-        if len(visited) % LOG_INTERVAL == 0:
-            print(f"[lattice_astar] expanded {len(visited):5d} nodes | "
-                f"open = {len(open_set):5d} | "
-                f"g = {node.g_cost:.2f} | "
-                f"h = {bot.heuristic(current, goal):.2f} | "
-                f"pos = ({x:.2f}, {y:.2f})")
-
-        if bot.is_terminal(current, goal):
-            attempted_path = bot.generate_trajectory(current, goal)
-
-            if attempted_path is not None and validate_path(env, bot, attempted_path):
-                print(f"[lattice_astar] found path: {len(visited)} expansions, "
-                    f"{len(reconstruct_path(node, attempted_path))} states")
-
-                initial_path = reconstruct_path(node, attempted_path)
-
-                return PlanResult(
-                    path=smooth_path(initial_path, bot, env),
-                    # path = initial_path,
-                    visited_xy=visited_xy,
-                )
-
-        # explore neighbors
-        for prim in prims.get(current):
-            endpoint = prim.endpoint
-            endpoint_key = discretize(endpoint, config)
-
-            if not validate_path(env, bot, prim.trajectory):
-                continue
-
-            tentative_g = node.g_cost + prim.cost
-
-            if tentative_g < g_score.get(endpoint_key, float("inf")):
-                g_score[endpoint_key]   = tentative_g
-                f                       = tentative_g + bot.heuristic(endpoint, goal)
-                heapq.heappush(open_set, SearchNode(
-                    f_cost      = f,
-                    g_cost      = tentative_g,
-                    state       = endpoint,
-                    parent      = node,
-                    trajectory  = prim.trajectory
-                ))
-
-    print(f"[lattice_astar] no path found after {len(visited)} expansions")
-
-    return PlanResult(path=None, visited_xy=visited_xy)
 
 
 
@@ -281,45 +227,3 @@ def hybrid_astar(
     print(f"[hybrid_astar] no path found after {len(visited)} expansions")
 
     return PlanResult(path=None, visited_xy=visited_xy)
-
-
-def smooth_path(
-        path: list[S],
-        bot: Bot,
-        obstacles: ObstacleEnvironment,
-        iterations: int = 100,
-    ) -> list[S]:
-    """
-    Probabilistic path shortcutting. Repeatedly picks two random indices, attempts
-    a direct connection via bot.generate_trajectory, and replaces the span if the
-    shortcut is collision-free. Skipped entirely for TrailerBot since
-    generate_trajectory ignores the trailer heading.
-    """
-    if isinstance(bot, TrailerBot):
-        return path
-
-    import random
-    path = list(path)
-    initial_len = len(path)
-    shortcuts_applied = 0
-
-    for i in range(iterations):
-        if len(path) < 3:
-            print(f"[smooth_path] path too short to shorten further, stopping at iteration {i}")
-            break
-
-        a = random.randint(0, len(path) - 2)
-        b = random.randint(a + 1, len(path) - 1)
-
-        shortcut = bot.generate_trajectory(path[a], path[b])
-        if shortcut is None:
-            continue
-
-        if validate_path(obstacles, bot, shortcut):
-            path = path[:a] + shortcut + path[b + 1:]
-            shortcuts_applied += 1
-
-    print(f"[smooth_path] {iterations} iterations | {shortcuts_applied} shortcuts applied | "
-          f"{initial_len} -> {len(path)} states")
-
-    return path

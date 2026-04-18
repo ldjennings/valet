@@ -6,7 +6,7 @@ from simulator.recorder import MP4Recorder, NoOpRecorder
 from environment import ObstacleEnvironment
 from simulator.render import Renderer
 from Bots import BotBundle, make_bot, S
-from Planner.astar import lattice_astar, hybrid_astar
+from Planner.astar import hybrid_astar
 from Planner.AstarConfig import GridConfig, HybridConfig
 from Planner.primitives import PrimitiveTable
 
