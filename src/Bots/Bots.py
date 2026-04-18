@@ -402,7 +402,11 @@ class CarBot:
         q0  = (start.rear_axle_x, start.rear_axle_y, start.heading_rad)
         q1  = (goal.rear_axle_x,  goal.rear_axle_y,  goal.heading_rad)
         raw = reeds_shepp.path_sample(q0, q1, self.turning_radius, resolution)
-        return [CarState(r[0], r[1], r[2]) for r in raw] if raw else None
+        if not raw:
+            return None
+        path = [CarState(r[0], r[1], r[2]) for r in raw]
+        path.append(goal)
+        return path
 
     def propagate(self, state: CarState, spacing: float, angular_spacing: float, steering_granularity: int) -> list[list[CarState]]:
         deltas = [

@@ -54,10 +54,6 @@ def smooth_path(
             continue
 
         if validate_shortcut(obstacles, bot, shortcut):
-            # generate_trajectory may not land exactly on path[b] (e.g. Reeds-Shepp
-            # samples at discrete intervals), so append path[b] to preserve the
-            # splice endpoint and prevent drift over many iterations
-            shortcut.append(path[b])
             path = path[:a] + shortcut + path[b + 1:]
             shortcuts_applied += 1
 
