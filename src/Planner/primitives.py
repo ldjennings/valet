@@ -1,8 +1,7 @@
 from Bots import S, Bot
-from typing import Generic, Iterator
+from typing import Generic
 from dataclasses import dataclass
-import itertools
-from Planner.AstarConfig import GridConfig
+from Planner.AstarConfig import HybridConfig
 import math
 
 
@@ -55,7 +54,7 @@ def _is_reverse(traj: list) -> bool:
     return (dx * math.cos(rest[0]) + dy * math.sin(rest[0])) < 0
 
 
-def propagated_primitives(bot: Bot, state: S, config: GridConfig, steering_granularity: int = 3) -> list[Primitive]:
+def propagated_primitives(bot: Bot, state: S, config: HybridConfig, steering_granularity: int = 3) -> list[Primitive]:
     """
     Call bot.propagate() and wrap each trajectory into a Primitive with arc-length cost.
     Each bot internally computes per-control n_steps so every primitive displaces

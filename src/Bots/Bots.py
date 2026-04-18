@@ -335,15 +335,15 @@ class DiffBot:
 class CarBot:
     """Ackermann steering (car-like) robot. Non-holonomic; minimum turning radius determined by MAX_STEER."""
 
-    SPEED           = 10.0
+    SPEED           = 1.0
     MAX_STEER       = math.radians(45)
     TERMINAL_RADIUS = 10.0
 
     def __init__(
         self,
         wheelbase: float = 2.8,
-        length: float = 4.2,
-        width: float = 1.5,
+        length: float = 5.2,
+        width: float = 1.8,
         goal_radius_tol: float = 0.25,
         goal_heading_tol: float = math.pi / 12,
     ):

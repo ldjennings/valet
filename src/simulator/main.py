@@ -7,7 +7,7 @@ from environment import ObstacleEnvironment
 from simulator.render import Renderer
 from Bots import BotBundle, make_bot, S
 from Planner.astar import hybrid_astar
-from Planner.AstarConfig import GridConfig, HybridConfig
+from Planner.AstarConfig import HybridConfig
 
 
 
@@ -64,9 +64,8 @@ def run(
             if event.type == pygame.QUIT:
                 running = False
 
-
-
-        if manual: # manual mode, control robot with keyboard
+        if manual:
+            # manual mode, control robot with keyboard
             next_state = bot.handle_input(state, 3.0)
             if environment.is_valid_state(bot.footprint(next_state)):
                 state = next_state

@@ -1,7 +1,7 @@
 from environment.obstacle import ObstacleEnvironment
 from Bots import S, Bot, TrailerBot
 from Planner.primitives import propagated_primitives
-from .AstarConfig import GridConfig, HybridConfig
+from .AstarConfig import HybridConfig
 import heapq
 from dataclasses import dataclass, field
 from typing import Generic
@@ -47,23 +47,18 @@ def validate_path(
     obstacles: ObstacleEnvironment, bot: Bot, path: list[S],
     coarse_step: int = 4, fine: bool = True,
 ) -> bool:
-    # Phase 1: center-point + full footprint on sparse subset (endpoints + every Nth).
-    for i in range(0, len(path), coarse_step):
-        x, y, *_ = path[i]
-        if not obstacles.is_point_free(x, y):
-            return False
-        if not obstacles.is_valid_state(bot.footprint(path[i])):
-            return False
+    # Phase 1: Check sparse subset (endpoint + every Nth).
 
     # always check last state
-    x, y, *_ = path[-1]
-    if not obstacles.is_point_free(x, y):
-        return False
     if not obstacles.is_valid_state(bot.footprint(path[-1])):
         return False
 
+    for i in range(0, len(path), coarse_step):
+        if not obstacles.is_valid_state(bot.footprint(path[i])):
+            return False
+
     if fine:
-        # Phase 2: fill in remaining states.
+        # Optional Phase 2: fill in remaining states.
         for i in range(len(path)):
             if i % coarse_step == 0:
                 continue
@@ -115,7 +110,7 @@ def smooth_path(
     return path
 
 
-def discretize(state: S, config: GridConfig) -> NodeKey:
+def discretize(state: S, config: HybridConfig) -> NodeKey:
     x, y, *rest = state
     key: NodeKey = (round(x / config.spacing), round(y / config.spacing))
 

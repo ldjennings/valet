@@ -48,7 +48,8 @@ def make_bot(
             return BotBundle(
                 PointBot(
                     goal_radius_tol     =  cfg.GOAL_RADIUS_TOLERANCE
-                ), PointState(start[0], start[1]), PointState(goal[0], goal[1])
+                ),
+                PointState(start[0], start[1]), PointState(goal[0], goal[1])
             )
 
         case "diff":
@@ -71,7 +72,8 @@ def make_bot(
                     width               = cfg.CAR_WIDTH_METERS,
                     goal_radius_tol     = cfg.GOAL_RADIUS_TOLERANCE,
                     goal_heading_tol    = cfg.GOAL_HEADING_TOLERANCE
-                ), CarState(start[0], start[1], 0), CarState(goal[0], goal[1], 0)
+                ),
+                CarState(start[0], start[1], 0), CarState(goal[0], goal[1], 0)
             )
 
         case "trailer":
