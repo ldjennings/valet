@@ -36,6 +36,9 @@ import numpy as np
 DT = 1 / 30
 
 
+STANDARD_SPEED = 5.0
+
+
 def _n_steps_for_control(spacing: float, v: float, omega: float, dt: float) -> int:
     """
     Compute how many simulation steps a (v, omega) control pair needs so that
@@ -146,8 +149,9 @@ class Bot(Protocol[S]):
 class PointBot:
     """Holonomic point robot. Can move in any direction; no heading or turning constraints."""
 
-    SPEED           = 7.5
-    TERMINAL_RADIUS = 1.0
+    # SPEED           = 7.5
+    SPEED           = STANDARD_SPEED
+    TERMINAL_RADIUS = 10.0
 
     def __init__(self, goal_radius_tol: float = 0.25):
         self.goal_radius_tol = goal_radius_tol
@@ -218,7 +222,8 @@ class PointBot:
 class DiffBot:
     """Differential drive robot. Can rotate in place; forward/backward and in-place turning."""
 
-    SPEED           = 7.5
+    # SPEED           = 7.5
+    SPEED           = STANDARD_SPEED
     OMEGA_MAX       = math.pi / 2      # rad/s
     TERMINAL_RADIUS = 2.0
 
@@ -348,7 +353,8 @@ class DiffBot:
 class CarBot:
     """Ackermann steering (car-like) robot. Non-holonomic; minimum turning radius determined by MAX_STEER."""
 
-    SPEED           = 7.5
+    # SPEED           = 7.5
+    SPEED           = STANDARD_SPEED
     MAX_STEER       = math.radians(45)
     TERMINAL_RADIUS = 10.0
 
@@ -446,7 +452,8 @@ class TrailerBot:
     to be within tolerance.
     """
 
-    SPEED           = 7.5
+    # SPEED           = 7.5
+    SPEED           = STANDARD_SPEED
     MAX_STEER       = math.radians(35)
     TERMINAL_RADIUS = 15.0
 
