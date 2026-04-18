@@ -7,4 +7,4 @@ that implements footprint generation, goal checking, and keyboard input handling
 
 from Bots.Bots import Bot, PointBot, DiffBot, CarBot, TrailerBot, DT
 from Bots.BotState import PointState, DiffState, CarState, TrailerState, S, center_distance, angle_distance_rad
-from Bots.Bundle import BotBundle, make_bot
+from simulator.Bundle import BotBundle, make_bot

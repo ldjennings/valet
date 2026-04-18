@@ -9,7 +9,6 @@ Base shapes (rectangles, circles) are built once via make_*_base() and cached
 by the bot instance. Per-state footprint calls only rotate + translate.
 """
 
-import simulator.config as cfg
 from Bots.BotState import PointState, DiffState, CarState, TrailerState
 
 import math
@@ -61,18 +60,20 @@ def car_geom(base: BaseGeometry, state: CarState) -> BaseGeometry:
 
 
 def truck_trailer_geom(
-    truck_base: BaseGeometry, trailer_base: BaseGeometry, state: TrailerState
+    truck_base: BaseGeometry, trailer_base: BaseGeometry,
+    state: TrailerState, hitch_distance: float,
 ) -> list[BaseGeometry]:
     """
-    Returns [truck, trailer, connection] as separate geometries.
+    Returns [connection, truck, trailer] as separate geometries.
+
+    hitch_distance: distance from hitch point (rear axle) to trailer axle center.
     """
     x, y, truck_heading, trailer_heading = state
 
     truck = place(truck_base, x, y, truck_heading)
 
-    D1 = cfg.TRUCK_HITCH_TO_TRAILER_AXLE
-    x_t = x - D1 * math.cos(trailer_heading)
-    y_t = y - D1 * math.sin(trailer_heading)
+    x_t = x - hitch_distance * math.cos(trailer_heading)
+    y_t = y - hitch_distance * math.sin(trailer_heading)
 
     trailer = place(trailer_base, x_t, y_t, trailer_heading)
     connection = LineString([(x, y), (x_t, y_t)])

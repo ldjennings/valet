@@ -5,9 +5,11 @@ Defines the Bot Protocol (structural interface) and four concrete implementation
 PointBot, DiffBot, CarBot, and TrailerBot. Each pairs with a corresponding state
 type from BotState and implements footprint generation, goal checking, trajectory
 generation, and keyboard input handling.
+
+Robot dimensions and goal tolerances are constructor parameters with sensible
+defaults, so the Bots package has no dependency on simulator.config.
 """
 
-import simulator.config as cfg
 import reeds_shepp
 from Bots.BotState import (
     S,
@@ -143,12 +145,13 @@ class PointBot:
     SPEED           = 1.0
     TERMINAL_RADIUS = 1.0
 
-    def __init__(self):
+    def __init__(self, goal_radius_tol: float = 0.25):
+        self.goal_radius_tol = goal_radius_tol
         self._base = make_point_base()
 
     def speed(self) -> float: return self.SPEED
 
-    def footprint(self, state: PointState):
+    def footprint(self, state: PointState) -> list[BaseGeometry]:
         return [point_geom(self._base, state)]
 
     def is_terminal(self, state: PointState, goal: PointState) -> bool:
@@ -158,7 +161,7 @@ class PointBot:
         return math.hypot(goal.x - state.x, goal.y - state.y)
 
     def at_goal(self, state: PointState, goal: PointState) -> bool:
-        return center_distance(state, goal) < cfg.goal_radius_tolerance
+        return center_distance(state, goal) < self.goal_radius_tol
 
     def generate_trajectory(
         self, start: PointState, goal: PointState, resolution: float = 0.1
@@ -214,12 +217,20 @@ class DiffBot:
     OMEGA_MAX       = math.pi / 2      # rad/s
     TERMINAL_RADIUS = 2.0
 
-    def __init__(self):
-        self._base = make_centered_rect_base(cfg.ROBOT_LENGTH_METERS, cfg.ROBOT_WIDTH_METERS)
+    def __init__(
+        self,
+        length: float = 0.7,
+        width: float = 0.57,
+        goal_radius_tol: float = 0.25,
+        goal_heading_tol: float = math.pi / 12,
+    ):
+        self.goal_radius_tol = goal_radius_tol
+        self.goal_heading_tol = goal_heading_tol
+        self._base = make_centered_rect_base(length, width)
 
     def speed(self) -> float: return self.SPEED
 
-    def footprint(self, state: DiffState):
+    def footprint(self, state: DiffState) -> list[BaseGeometry]:
         return [diff_geom(self._base, state)]
 
     def is_terminal(self, state: DiffState, goal: DiffState) -> bool:
@@ -239,9 +250,9 @@ class DiffBot:
 
     def at_goal(self, state: DiffState, goal: DiffState) -> bool:
         return (
-            center_distance(state, goal) < cfg.goal_radius_tolerance
+            center_distance(state, goal) < self.goal_radius_tol
             and abs(angle_distance_rad(state.heading_rad, goal.heading_rad))
-            < cfg.goal_heading_tolerance
+            < self.goal_heading_tol
         )
 
     def generate_trajectory(
@@ -293,6 +304,7 @@ class DiffBot:
                 traj: list[DiffState] = [state]
                 for _ in range(n_steps):
                     traj.append(traj[-1].step(v, omega, DT))
+
                 trajectories.append(traj)
         # rotate in place
         n_rot = max(1, math.ceil(spacing / (self.OMEGA_MAX * DT)))
@@ -325,15 +337,25 @@ class CarBot:
 
     SPEED           = 10.0
     MAX_STEER       = math.radians(45)
-    TURNING_RADIUS  = cfg.CAR_WHEELBASE_METERS / math.tan(MAX_STEER)
     TERMINAL_RADIUS = 10.0
 
-    def __init__(self):
-        self._base = make_axle_rect_base(cfg.CAR_WHEELBASE_METERS, cfg.CAR_LENGTH_METERS, cfg.CAR_WIDTH_METERS)
+    def __init__(
+        self,
+        wheelbase: float = 2.8,
+        length: float = 4.2,
+        width: float = 1.5,
+        goal_radius_tol: float = 0.25,
+        goal_heading_tol: float = math.pi / 12,
+    ):
+        self.wheelbase = wheelbase
+        self.turning_radius = wheelbase / math.tan(self.MAX_STEER)
+        self.goal_radius_tol = goal_radius_tol
+        self.goal_heading_tol = goal_heading_tol
+        self._base = make_axle_rect_base(wheelbase, length, width)
 
     def speed(self) -> float: return self.SPEED
 
-    def footprint(self, state: CarState):
+    def footprint(self, state: CarState) -> list[BaseGeometry]:
         return [car_geom(self._base, state)]
 
     def is_terminal(self, state: CarState, goal: CarState) -> bool:
@@ -342,19 +364,19 @@ class CarBot:
     def heuristic(self, state: CarState, goal: CarState) -> float:
         q0 = (state.rear_axle_x, state.rear_axle_y, state.heading_rad)
         q1 = (goal.rear_axle_x,  goal.rear_axle_y,  goal.heading_rad)
-        return reeds_shepp.path_length(q0, q1, self.TURNING_RADIUS)
+        return reeds_shepp.path_length(q0, q1, self.turning_radius)
 
     def at_goal(self, state: CarState, goal: CarState) -> bool:
         return (
-            center_distance(state, goal) < cfg.goal_radius_tolerance
+            center_distance(state, goal) < self.goal_radius_tol
             and abs(angle_distance_rad(state.heading_rad, goal.heading_rad))
-            < cfg.goal_heading_tolerance
+            < self.goal_heading_tol
         )
 
     def generate_trajectory(self, start: CarState, goal: CarState, resolution: float = 0.1) -> list[CarState] | None:
         q0  = (start.rear_axle_x, start.rear_axle_y, start.heading_rad)
         q1  = (goal.rear_axle_x,  goal.rear_axle_y,  goal.heading_rad)
-        raw = reeds_shepp.path_sample(q0, q1, self.TURNING_RADIUS, resolution)
+        raw = reeds_shepp.path_sample(q0, q1, self.turning_radius, resolution)
         return [CarState(r[0], r[1], r[2]) for r in raw] if raw else None
 
     def propagate(self, state: CarState, spacing: float, steering_granularity: int) -> list[list[CarState]]:
@@ -365,11 +387,11 @@ class CarBot:
         trajectories = []
         for v in (self.SPEED, -self.SPEED):
             for delta in deltas:
-                omega = v * math.tan(delta) / cfg.CAR_WHEELBASE_METERS if delta != 0 else 0.0
+                omega = v * math.tan(delta) / self.wheelbase if delta != 0 else 0.0
                 n_steps = _n_steps_for_control(spacing, v, omega, DT)
                 traj: list[CarState] = [state]
                 for _ in range(n_steps):
-                    traj.append(traj[-1].step(v, delta, cfg.CAR_WHEELBASE_METERS, DT))
+                    traj.append(traj[-1].step(v, delta, self.wheelbase, DT))
                 trajectories.append(traj)
         return trajectories
 
@@ -387,7 +409,7 @@ class CarBot:
         elif keys[pygame.K_RIGHT] and not keys[pygame.K_LEFT]:
             delta = self.MAX_STEER
 
-        return state.step(v, delta, cfg.CAR_WHEELBASE_METERS, DT)
+        return state.step(v, delta, self.wheelbase, DT)
 
     def make_state(self, x: float, y: float, h: float = 0, t:float = 0) -> CarState:
         return CarState(x, y, h)
@@ -402,17 +424,33 @@ class TrailerBot:
 
     SPEED           = 7.5
     MAX_STEER       = math.radians(35)
-    TURNING_RADIUS  = cfg.TRUCK_WHEELBASE_METERS / math.tan(MAX_STEER)
     TERMINAL_RADIUS = 15.0
 
-    def __init__(self):
-        self._truck_base = make_axle_rect_base(cfg.TRUCK_WHEELBASE_METERS, cfg.TRUCK_LENGTH_METERS, cfg.TRUCK_WIDTH_METERS)
-        self._trailer_base = make_centered_rect_base(cfg.TRAILER_LENGTH_METERS, cfg.TRAILER_WIDTH_METERS)
+    def __init__(
+        self,
+        wheelbase: float = 3.4,
+        length: float = 5.4,
+        width: float = 2.0,
+        hitch_distance: float = 5.0,
+        trailer_length: float = 4.5,
+        trailer_width: float = 2.0,
+        goal_radius_tol: float = 0.25,
+        goal_heading_tol: float = math.pi / 12,
+        trailer_heading_tol: float = math.pi / 32,
+    ):
+        self.wheelbase = wheelbase
+        self.hitch_distance = hitch_distance
+        self.turning_radius = wheelbase / math.tan(self.MAX_STEER)
+        self.goal_radius_tol = goal_radius_tol
+        self.goal_heading_tol = goal_heading_tol
+        self.trailer_heading_tol = trailer_heading_tol
+        self._truck_base = make_axle_rect_base(wheelbase, length, width)
+        self._trailer_base = make_centered_rect_base(trailer_length, trailer_width)
 
     def speed(self) -> float: return self.SPEED
 
-    def footprint(self, state: TrailerState):
-        return truck_trailer_geom(self._truck_base, self._trailer_base, state)
+    def footprint(self, state: TrailerState) -> list[BaseGeometry]:
+        return truck_trailer_geom(self._truck_base, self._trailer_base, state, self.hitch_distance)
 
     def is_terminal(self, state: TrailerState, goal: TrailerState) -> bool:
         return center_distance(state, goal) < self.TERMINAL_RADIUS
@@ -421,15 +459,15 @@ class TrailerBot:
         # RS on the truck state only — trailer heading is handled by generate_trajectory
         q0 = (state.rear_axle_x, state.rear_axle_y, state.heading_rad)
         q1 = (goal.rear_axle_x,  goal.rear_axle_y,  goal.heading_rad)
-        return reeds_shepp.path_length(q0, q1, self.TURNING_RADIUS)
+        return reeds_shepp.path_length(q0, q1, self.turning_radius)
 
     def at_goal(self, state: TrailerState, goal: TrailerState) -> bool:
         return (
-            center_distance(state, goal) < cfg.goal_radius_tolerance
+            center_distance(state, goal) < self.goal_radius_tol
             and abs(angle_distance_rad(state.heading_rad, goal.heading_rad))
-            < cfg.goal_heading_tolerance
+            < self.goal_heading_tol
             and abs(angle_distance_rad(state.trailer_heading_rad, goal.trailer_heading_rad))
-            < cfg.trailer_heading_tolerance
+            < self.trailer_heading_tol
         )
 
     def generate_trajectory(
@@ -437,7 +475,7 @@ class TrailerBot:
     ) -> list[TrailerState] | None:
         q0  = (start.rear_axle_x, start.rear_axle_y, start.heading_rad)
         q1  = (goal.rear_axle_x,  goal.rear_axle_y,  goal.heading_rad)
-        raw = reeds_shepp.path_sample(q0, q1, self.TURNING_RADIUS, resolution)
+        raw = reeds_shepp.path_sample(q0, q1, self.turning_radius, resolution)
         if not raw:
             return None
 
@@ -452,7 +490,7 @@ class TrailerBot:
             ds           = math.hypot(x - raw[i-1][0], y - raw[i-1][1])
 
             # integrate trailer heading along arc (derived from TrailerState.step kinematics)
-            phi += length_sign * math.sin(angle_distance_rad(theta, phi)) * ds / cfg.TRUCK_HITCH_TO_TRAILER_AXLE
+            phi += length_sign * math.sin(angle_distance_rad(theta, phi)) * ds / self.hitch_distance
 
             if abs(angle_distance_rad(theta, phi)) > JACKKNIFE_LIMIT:
                 return None
@@ -469,11 +507,11 @@ class TrailerBot:
         trajectories = []
         for v in (self.SPEED, -self.SPEED):
             for delta in deltas:
-                omega = v * math.tan(delta) / cfg.TRUCK_WHEELBASE_METERS if delta != 0 else 0.0
+                omega = v * math.tan(delta) / self.wheelbase if delta != 0 else 0.0
                 n_steps = _n_steps_for_control(spacing, v, omega, DT)
                 traj: list[TrailerState] = [state]
                 for _ in range(n_steps):
-                    traj.append(traj[-1].step(v, delta, cfg.TRUCK_WHEELBASE_METERS, cfg.TRUCK_HITCH_TO_TRAILER_AXLE, DT))
+                    traj.append(traj[-1].step(v, delta, self.wheelbase, self.hitch_distance, DT))
                 trajectories.append(traj)
         return trajectories
 
@@ -491,12 +529,7 @@ class TrailerBot:
         elif keys[pygame.K_RIGHT] and not keys[pygame.K_LEFT]:
             delta = self.MAX_STEER
 
-        next_state = state.step(
-            v, delta, cfg.TRUCK_WHEELBASE_METERS, cfg.TRUCK_HITCH_TO_TRAILER_AXLE, DT
-        )
-        # if abs(next_state.trailer_heading) > cfg.MAX_HITCH_ANGLE: # potential check for jacknifed trailer
-        #     return state
-        return next_state
+        return state.step(v, delta, self.wheelbase, self.hitch_distance, DT)
 
     def make_state(self, x: float, y: float, h: float = 0, t:float = 0) -> TrailerState:
         return TrailerState(x, y, h, t)

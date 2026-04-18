@@ -14,10 +14,9 @@ METERS_TO_PIXELS = min(
 )
 
 
-goal_radius_tolerance: float = 0.25
-# goal_radius_tolerance: float = 5
-goal_heading_tolerance: float = math.pi / 12
-trailer_heading_tolerance: float = math.pi / 32
+GOAL_RADIUS_TOLERANCE: float = 0.25
+GOAL_HEADING_TOLERANCE: float = math.pi / 12
+TRAILER_HEADING_TOLERANCE: float = math.pi / 32
 
 
 # differential drive robot dimensions
