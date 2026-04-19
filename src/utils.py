@@ -11,6 +11,11 @@ import reeds_shepp
 from Bots.BotState import PointState, DiffState, CarState, TrailerState, S
 
 
+def steps_to_cover(total: float, step_size: float, minimum: int = 1) -> int:
+    """Minimum number of steps of `step_size` needed to cover `total`."""
+    return max(minimum, math.ceil(total / step_size))
+
+
 def wrap_angle(delta: float) -> float:
     """Wrap an angular difference to [-π, π]."""
     return (delta + math.pi) % (2 * math.pi) - math.pi
@@ -67,9 +72,9 @@ def lerp_angle(a: float, b: float, t: float) -> float:
 
 def linspace_angles(a: float, b: float, resolution: float) -> list[float]:
     """Interpolate from angle a to angle b at `resolution`-radian steps, handling wrapping."""
-    delta = wrap_angle(b - a)
+    delta = angle_difference(b, a)
 
-    n = max(2, math.ceil(abs(delta) / resolution) + 1)
+    n = steps_to_cover(abs(delta), resolution, minimum=2)
 
     return [float(h) for h in np.linspace(a, a + delta, n)]
 
@@ -78,7 +83,7 @@ def linspace_xy(p1: tuple[float, float], p2: tuple[float, float], resolution: fl
 ) -> list[tuple[float, float]]:
     """Interpolate from (x1,y1) to (x2,y2) at `resolution`-meter steps."""
     dist = center_distance(p1, p2)
-    num_steps = max(2, math.ceil(dist / resolution) + 1)
+    num_steps = steps_to_cover(dist, resolution, minimum=2)
 
     ps = np.linspace(p1, p2, num_steps)
 

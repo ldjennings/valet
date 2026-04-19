@@ -17,7 +17,7 @@ from Bots.BotState import (
     CarState,
     TrailerState,
 )
-from utils import angle_difference, center_distance, angle_distance, linspace_angles, linspace_xy, rs_path_sample
+from utils import angle_difference, angs, center_distance, angle_distance, linspace_angles, linspace_xy, rs_path_sample, steps_to_cover
 from Bots.geometry_helpers import (
     point_geom, place, cached_geom, truck_trailer_geom,
     make_point_base, make_centered_rect_base, make_axle_rect_base,
@@ -46,7 +46,7 @@ def _n_steps_for_control(spacing: float, v: float, omega: float, dt: float) -> i
                          is R * sqrt(2 - 2cos(θ)).  Solve for θ then n.
     """
     if abs(omega) < 1e-9:
-        return max(1, math.ceil(spacing / (abs(v) * dt)))
+        return steps_to_cover(spacing, abs(v) * dt)
 
     R = abs(v / omega)
     # R * sqrt(2 - 2cos(θ)) = spacing → cos(θ) = 1 - spacing² / (2R²)
@@ -56,7 +56,7 @@ def _n_steps_for_control(spacing: float, v: float, omega: float, dt: float) -> i
         theta = math.pi
     else:
         theta = math.acos(cos_theta)
-    return max(1, math.ceil(theta / (abs(omega) * dt))) + 3
+    return steps_to_cover(theta, abs(omega) * dt) + 3
 
 
 class Bot(Protocol[S]):
@@ -143,30 +143,50 @@ class Bot(Protocol[S]):
         ...
 
 
-class PointBot:
+class BotBase:
+    """Shared implementations for heuristic, is_terminal, and at_goal.
+
+    Subclasses set TERMINAL_RADIUS, goal_radius_tol, and angular_tolerances
+    (one entry per angle component in the state — empty for PointBot,
+    (heading_tol,) for Diff/Car, (heading_tol, trailer_tol) for Trailer).
+    """
+
+    TERMINAL_RADIUS: float
+    goal_radius_tol: float
+    angular_tolerances: tuple[float, ...] = ()
+    SPEED = STANDARD_SPEED
+
+    def speed(self) -> float: return self.SPEED
+
+    def is_terminal(self, state, goal) -> bool:
+        return center_distance(state, goal) < self.TERMINAL_RADIUS
+
+    def heuristic(self, state, goal) -> float:
+        return center_distance(state, goal)
+
+    def at_goal(self, state, goal) -> bool:
+        if center_distance(state, goal) >= self.goal_radius_tol:
+            return False
+        state_angs = angs(state)
+        goal_angs = angs(goal)
+        if state_angs and goal_angs:
+            for sa, ga, tol in zip(state_angs, goal_angs, self.angular_tolerances):
+                if angle_distance(sa, ga) >= tol:
+                    return False
+        return True
+
+
+class PointBot(BotBase):
     """Holonomic point robot. Can move in any direction; no heading or turning constraints."""
 
-    # SPEED           = 7.5
-    SPEED           = STANDARD_SPEED
     TERMINAL_RADIUS = 10.0
 
     def __init__(self, goal_radius_tol: float = 0.25):
         self.goal_radius_tol = goal_radius_tol
         self._base = make_point_base()
 
-    def speed(self) -> float: return self.SPEED
-
     def footprint(self, state: PointState, approximate: bool = False) -> list[BaseGeometry]:
         return [point_geom(self._base, state)]
-
-    def is_terminal(self, state: PointState, goal: PointState) -> bool:
-        return center_distance(state, goal) < self.TERMINAL_RADIUS
-
-    def heuristic(self, state: PointState, goal: PointState) -> float:
-        return center_distance(state, goal)
-
-    def at_goal(self, state: PointState, goal: PointState) -> bool:
-        return center_distance(state, goal) < self.goal_radius_tol
 
     def generate_trajectory(
         self, start: PointState, goal: PointState, resolution: float = 0.1
@@ -183,7 +203,7 @@ class PointBot:
         # n_steps so that diagonal displacement per axis >= spacing:
         # diagonal per-axis = n * step / sqrt(2) >= spacing → n >= spacing * sqrt(2) / step
         # angular_spacing is unused — point bot has no heading.
-        n_steps = max(1, math.ceil(spacing * math.sqrt(2) / step))
+        n_steps = steps_to_cover(spacing * math.sqrt(2), step)
         trajectories = []
         for dx, dy in [(-1,-1),(-1,0),(-1,1),(0,-1),(0,1),(1,-1),(1,0),(1,1)]:
             norm = math.hypot(dx, dy)
@@ -216,11 +236,9 @@ class PointBot:
         return PointState(x, y)
 
 
-class DiffBot:
+class DiffBot(BotBase):
     """Differential drive robot. Can rotate in place; forward/backward and in-place turning."""
 
-    # SPEED           = 7.5
-    SPEED           = STANDARD_SPEED
     OMEGA_MAX       = math.pi / 2      # rad/s
     TERMINAL_RADIUS = 2.0
 
@@ -232,45 +250,15 @@ class DiffBot:
         goal_heading_tol: float = math.pi / 12,
     ):
         self.goal_radius_tol = goal_radius_tol
-        self.goal_heading_tol = goal_heading_tol
+        self.angular_tolerances = (goal_heading_tol,)
         self._base = make_centered_rect_base(length, width)
         self._cache = build_heading_cache(self._base)
 
-    def speed(self) -> float: return self.SPEED
 
     def footprint(self, state: DiffState, approximate: bool = False) -> list[BaseGeometry]:
         if approximate:
             return [cached_geom(self._cache, state.center_x, state.center_y, state.heading_rad)]
         return [place(self._base, state.center_x, state.center_y, state.heading_rad)]
-
-    def is_terminal(self, state: DiffState, goal: DiffState) -> bool:
-        return center_distance(state, goal) < self.TERMINAL_RADIUS
-
-    def heuristic(self, state: DiffState, goal: DiffState) -> float:
-
-        # this might have made a benefit before, I dont think its really needed now
-
-        # dx   = goal.center_x - state.center_x
-        # dy   = goal.center_y - state.center_y
-        # dist = math.hypot(dx, dy)
-        # if dist < 1e-3:
-        #     return 0.0
-        # # penalise heading error relative to goal direction — tightens the heuristic
-        # # without this, all headings at the same position get equal priority
-        # goal_dir      = math.atan2(dy, dx)
-        # heading_error = angle_distance(state.heading_rad, goal_dir)
-        # return dist + heading_error * 0.5  # 0.5 matches ROTATION_COST_WEIGHT in primitives.py
-
-        return center_distance(state, goal)
-
-    def at_goal(self, state: DiffState, goal: DiffState) -> bool:
-        return (
-            center_distance(state, goal) < self.goal_radius_tol
-
-            and
-
-            angle_distance(state.heading_rad, goal.heading_rad) < self.goal_heading_tol
-        )
 
     def generate_trajectory(
         self, start: DiffState, goal: DiffState, resolution: float = 0.1
@@ -317,7 +305,7 @@ class DiffBot:
                 n_xy = _n_steps_for_control(spacing, v, omega, DT)
                 # for turning primitives, ensure heading changes by at least one angular bin
                 if abs(omega) > 1e-9:
-                    n_heading = math.ceil(angular_spacing / (abs(omega) * DT))
+                    n_heading = steps_to_cover(angular_spacing, abs(omega) * DT)
                     n_steps = max(n_xy, n_heading)
                 else:
                     n_steps = n_xy
@@ -326,7 +314,7 @@ class DiffBot:
                     traj.append(traj[-1].step(v, omega, DT))
                 trajectories.append(traj)
         # rotate in place
-        n_rot = max(1, math.ceil(angular_spacing / (self.OMEGA_MAX * DT)))
+        n_rot = steps_to_cover(angular_spacing, self.OMEGA_MAX * DT)
         for omega in (-self.OMEGA_MAX, self.OMEGA_MAX):
             traj = [state]
             for _ in range(n_rot):
@@ -351,11 +339,9 @@ class DiffBot:
     def make_state(self, x: float, y: float, h: float = 0, t:float = 0) -> DiffState:
         return DiffState(x, y, h)
 
-class CarBot:
+class CarBot(BotBase):
     """Ackermann steering (car-like) robot. Non-holonomic; minimum turning radius determined by MAX_STEER."""
 
-    # SPEED           = 7.5
-    SPEED           = STANDARD_SPEED
     MAX_STEER       = math.radians(45)
     TERMINAL_RADIUS = 10.0
 
@@ -370,33 +356,15 @@ class CarBot:
         self.wheelbase = wheelbase
         self.turning_radius = wheelbase / math.tan(self.MAX_STEER)
         self.goal_radius_tol = goal_radius_tol
-        self.goal_heading_tol = goal_heading_tol
+        self.angular_tolerances = (goal_heading_tol,)
         self._base = make_axle_rect_base(wheelbase, length, width)
         self._cache = build_heading_cache(self._base)
 
-    def speed(self) -> float: return self.SPEED
 
     def footprint(self, state: CarState, approximate: bool = False) -> list[BaseGeometry]:
         if approximate:
             return [cached_geom(self._cache, state.rear_axle_x, state.rear_axle_y, state.heading_rad)]
         return [place(self._base, state.rear_axle_x, state.rear_axle_y, state.heading_rad)]
-
-    def is_terminal(self, state: CarState, goal: CarState) -> bool:
-        return center_distance(state, goal) < self.TERMINAL_RADIUS
-
-    def heuristic(self, state: CarState, goal: CarState) -> float:
-        # TODO: SWITCH BACK TO REEDS_SHEPP ONCE DONE EXPERIMENTING
-        # return rs_path_length(state, goal, self.turning_radius)
-        return center_distance(state, goal)
-
-    def at_goal(self, state: CarState, goal: CarState) -> bool:
-        return (
-            center_distance(state, goal) < self.goal_radius_tol
-
-            and
-
-            angle_distance(state.heading_rad, goal.heading_rad) < self.goal_heading_tol
-        )
 
     def generate_trajectory(self, start: CarState, goal: CarState, resolution: float = 0.1) -> list[CarState] | None:
         raw = rs_path_sample(start, goal, self.turning_radius, resolution)
@@ -417,7 +385,7 @@ class CarBot:
                 omega = v * math.tan(delta) / self.wheelbase if delta != 0 else 0.0
                 n_xy = _n_steps_for_control(spacing, v, omega, DT)
                 if abs(omega) > 1e-9:
-                    n_heading = math.ceil(angular_spacing / (abs(omega) * DT))
+                    n_heading = steps_to_cover(angular_spacing, abs(omega) * DT)
                     n_steps = max(n_xy, n_heading)
                 else:
                     n_steps = n_xy
@@ -447,15 +415,13 @@ class CarBot:
         return CarState(x, y, h)
 
 
-class TrailerBot:
+class TrailerBot(BotBase):
     """
     Truck-and-trailer system. The truck uses Ackermann steering; the trailer follows
     passively via hitch kinematics. Goal checking requires both truck and trailer headings
     to be within tolerance.
     """
 
-    # SPEED           = 7.5
-    SPEED           = STANDARD_SPEED
     MAX_STEER       = math.radians(35)
     TERMINAL_RADIUS = 15.0
 
@@ -475,38 +441,18 @@ class TrailerBot:
         self.hitch_distance = hitch_distance
         self.turning_radius = wheelbase / math.tan(self.MAX_STEER)
         self.goal_radius_tol = goal_radius_tol
-        self.goal_heading_tol = goal_heading_tol
-        self.trailer_heading_tol = trailer_heading_tol
+        self.angular_tolerances = (goal_heading_tol, trailer_heading_tol)
         self._truck_base = make_axle_rect_base(wheelbase, length, width)
         self._trailer_base = make_centered_rect_base(trailer_length, trailer_width)
         self._truck_cache = build_heading_cache(self._truck_base)
         self._trailer_cache = build_heading_cache(self._trailer_base)
 
-    def speed(self) -> float: return self.SPEED
+
 
     def footprint(self, state: TrailerState, approximate: bool = False) -> list[BaseGeometry]:
         return truck_trailer_geom(
             self._truck_base, self._trailer_base, state, self.hitch_distance,
             self._truck_cache, self._trailer_cache, approximate,
-        )
-
-    def is_terminal(self, state: TrailerState, goal: TrailerState) -> bool:
-        return center_distance(state, goal) < self.TERMINAL_RADIUS
-
-    def heuristic(self, state: TrailerState, goal: TrailerState) -> float:
-        return center_distance(state, goal)
-
-    def at_goal(self, state: TrailerState, goal: TrailerState) -> bool:
-        return (
-            center_distance(state, goal) < self.goal_radius_tol
-
-            and
-
-            angle_distance(state.heading_rad, goal.heading_rad) < self.goal_heading_tol
-
-            and
-
-            angle_distance(state.trailer_heading_rad, goal.trailer_heading_rad) < self.trailer_heading_tol
         )
 
     def generate_trajectory(
@@ -549,7 +495,7 @@ class TrailerBot:
                 omega = v * math.tan(delta) / self.wheelbase if delta != 0 else 0.0
                 n_xy = _n_steps_for_control(spacing, v, omega, DT)
                 if abs(omega) > 1e-9:
-                    n_heading = math.ceil(angular_spacing / (abs(omega) * DT))
+                    n_heading = steps_to_cover(angular_spacing, abs(omega) * DT)
                     n_steps = max(n_xy, n_heading)
                 else:
                     n_steps = n_xy
