@@ -8,6 +8,7 @@ and Reeds-Shepp boilerplate into a single module.
 import math
 import numpy as np
 import reeds_shepp
+from Bots.BotState import PointState, DiffState, CarState, TrailerState, S
 
 
 def wrap_angle(delta: float) -> float:
@@ -15,7 +16,7 @@ def wrap_angle(delta: float) -> float:
     return (delta + math.pi) % (2 * math.pi) - math.pi
 
 
-def angle_distance(a: float, b: float, signed: bool = False) -> float:
+def angle_distance(a: float, b: float) -> float:
     """Absolute angular difference from b to a, wrapped to [-π, π]. Equivalent to abs(wrap_angle(a - b)).
     can optionally
     """
@@ -35,10 +36,21 @@ def pos(state) -> tuple[float, float]:
     return (x, y)
 
 
-def angles(state) -> tuple[float, ...]:
+def angs(state) -> tuple[float, ...] | None:
     """Extract angle components (heading, trailer heading, ...) from a state."""
     _, _, *rest = state
-    return tuple(rest)
+    if rest is None:
+        return None
+    else:
+        return tuple(rest)
+
+def heading(state) -> float | None:
+    """Extract heading from a state. Returns None if not present"""
+    _, _, rest, *_ = state
+    if rest is None:
+        return None
+    else:
+        return rest
 
 
 def center_distance(s1, s2) -> float:
@@ -89,3 +101,23 @@ def rs_path_sample(start, goal, turning_radius: float, resolution: float = 0.1) 
     x1, y1, h1, *_ = goal
     raw = reeds_shepp.path_sample((x0, y0, h0), (x1, y1, h1), turning_radius, resolution)
     return raw if raw else None
+
+
+def arc_len(s1, s2, ang_weight: float) -> float:
+    x1, y1, h1, *_ = s1
+    x2, y2, h2, *_ = s2
+    return center_distance((x1, y1), (x2, y2)) + angle_difference(h1, h2) * ang_weight
+
+
+def trajectory_length(traj: list[S], ang_weight: float) -> float:
+    if isinstance(traj[0], PointState):
+        return sum(
+            center_distance(p0, p1)
+            for p0, p1 in zip(traj, traj[1:])
+        )
+    else:
+        # assert
+        return sum(
+            arc_len(p0, p1, ang_weight)
+            for p0, p1 in zip(traj, traj[1:])
+        )

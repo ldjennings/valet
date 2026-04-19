@@ -9,6 +9,8 @@ from typing import Generic
 from typing import TypeAlias
 
 import math
+
+from utils import pos
 NodeKey: TypeAlias = tuple[int, ...]
 
 @dataclass
@@ -48,6 +50,8 @@ def validate_path(
     obstacles: ObstacleEnvironment, bot: Bot, path: list[S],
     coarse_step: int = 4, fine: bool = True,
 ) -> bool:
+    # this is the most expensive method in the whole program, so steps have been taken to optimize it.
+
     # Phase 1: Check sparse subset (endpoint + every Nth).
     # Uses approximate (cached) footprints for speed during search.
 
@@ -60,7 +64,7 @@ def validate_path(
             return False
 
     if fine:
-        # Optional Phase 2: fill in remaining states.
+        # Optional Phase 2: check remaining states.
         for i in range(len(path)):
             if i % coarse_step == 0:
                 continue
@@ -106,8 +110,8 @@ def hybrid_astar(
 
     LOG_INTERVAL = 500  # print a status line every N expansions
 
-    x0, y0, *_ = start
-    xg, yg, *_ = goal
+    x0, y0 = pos(start)
+    xg, yg = pos(goal)
     print(f"[hybrid_astar] searching from ({x0:.2f}, {y0:.2f}) to ({xg:.2f}, {yg:.2f})")
 
     start_key = discretize(start, config)
@@ -134,9 +138,9 @@ def hybrid_astar(
             continue
         visited.add(current_key)
 
-        x, y, *_ = current
+        p = pos(current)
         if debug:
-            visited_xy.append((x, y))
+            visited_xy.append(p)
 
         if config.max_iterations is not None and len(visited) >= config.max_iterations:
             print(f"[hybrid_astar] hit max_iterations ({config.max_iterations}) — stopping")
@@ -147,7 +151,7 @@ def hybrid_astar(
                 f"open = {len(open_set):5d} | "
                 f"g = {node.g_cost:.2f} | "
                 f"h = {bot.heuristic(current, goal):.2f} | "
-                f"pos = ({x:.2f}, {y:.2f})")
+               f"pos = ({p[0]:.2f}, {p[1]:.2f})")
 
         if bot.is_terminal(current, goal):
             attempted_path = bot.generate_trajectory(current, goal)

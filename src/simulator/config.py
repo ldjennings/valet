@@ -2,9 +2,6 @@ import math
 
 # screen/environment stuff
 NUM_ROWS, NUM_COLS = 12, 12
-# NUM_ROWS, NUM_COLS = 4, 6
-# CELL_SIZE = 15
-# NUM_ENEMIES = 100
 VIRTUAL_SIZE = (800, 800)
 
 # Conversion factors
@@ -28,8 +25,7 @@ ROBOT_WHEELBASE_METERS = ROBOT_WIDTH_METERS / 2
 # Car dimensions
 CAR_WIDTH_METERS = 1.8
 CAR_LENGTH_METERS = 5.2
-# CAR_WIDTH_METERS = 1.5
-# CAR_LENGTH_METERS = 4.2
+
 CAR_WHEELBASE_METERS = 2.8
 
 # Truck dimensions

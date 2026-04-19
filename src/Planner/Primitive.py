@@ -1,5 +1,5 @@
 from Bots import S, Bot
-from utils import wrap_angle
+from utils import angle_distance, angs, center_distance, heading, pos, trajectory_length, wrap_angle
 from typing import Generic
 from dataclasses import dataclass
 from Planner.AstarConfig import HybridConfig
@@ -26,35 +26,21 @@ class Primitive(Generic[S]):
 
 ROTATION_COST_WEIGHT = 0.5  # cost per radian of heading change; keeps rotate-in-place nonzero
 
-def _arc_length(traj: list) -> float:
-    """
-    Arc length of a trajectory plus a weighted heading-change penalty.
-    The rotation term ensures pure in-place rotations have nonzero cost,
-    preventing the planner from spinning for free.
-    Works for all state types via __iter__.
-    """
-    total = 0.0
-    for s1, s2 in zip(traj, traj[1:]):
-        x1, y1, *rest1 = s1
-        x2, y2, *rest2 = s2
-        total += math.hypot(x2 - x1, y2 - y1)
-        if rest1 and rest2:
-            total += abs(wrap_angle(rest1[0] - rest2[0])) * ROTATION_COST_WEIGHT
-    return total
-
 
 def _is_reverse(traj: list) -> bool:
     """True if the primitive moves opposite to the starting heading (reverse gear)."""
-    x1, y1, *rest = traj[0]
-    x2, y2, *_    = traj[1]
+    heading = angs(traj[0])
 
-    if not rest:
+    if not heading:
         return False  # PointBot has no heading
+
+    x1, y1 = pos(traj[0])
+    x2, y2 = pos(traj[1])
 
     dx, dy = x2 - x1, y2 - y1
     if math.hypot(dx, dy) < 1e-6:
         return False  # pure rotation, not reverse
-    return (dx * math.cos(rest[0]) + dy * math.sin(rest[0])) < 0
+    return (dx * math.cos(heading[0]) + dy * math.sin(heading[0])) < 0
 
 
 def propagated_primitives(bot: Bot, state: S, config: HybridConfig, steering_granularity: int = 3) -> list[Primitive]:
@@ -65,8 +51,10 @@ def propagated_primitives(bot: Bot, state: S, config: HybridConfig, steering_gra
     """
     primitives = []
     for traj in bot.propagate(state, config.spacing, config.angular_spacing, steering_granularity):
-        cost = _arc_length(traj)
-        if config.reverse_cost > 0 and _is_reverse(traj):
+
+        cost = trajectory_length(traj, ROTATION_COST_WEIGHT)
+        if  _is_reverse(traj):
             cost += config.reverse_cost
+
         primitives.append(Primitive(traj, cost))
     return primitives

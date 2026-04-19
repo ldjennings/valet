@@ -9,7 +9,7 @@ import math
 import random
 
 from Bots import S, Bot, TrailerBot
-from utils import angle_difference, angle_distance, center_distance, pos, wrap_angle, lerp_angle
+from utils import center_distance, linspace_angles, pos, angs, lerp_angle, trajectory_length
 from environment.obstacle import ObstacleEnvironment
 
 
@@ -27,7 +27,7 @@ def smooth_path(
         path: list[S],
         bot: Bot,
         obstacles: ObstacleEnvironment,
-        iterations: int = 200,
+        iterations: int = 100,
     ) -> list[S]:
     """
     Probabilistic path shortcutting. Repeatedly picks two random indices, attempts
@@ -77,9 +77,9 @@ def isolate_rotation(path: list[S], start: int) -> int:
     """
     end = start + 1
     while end < len(path):
-        x0, y0, *_ = path[end - 1]
-        x1, y1, *_ = path[end]
-        if math.hypot(x1 - x0, y1 - y0) >= 1e-12:
+        p1 = pos(path[end - 1])
+        p2 = pos(path[end])
+        if center_distance(p1, p2) >= 1e-12:
             break
         end += 1
     return end
@@ -97,29 +97,24 @@ def resample_rotation(segment: list[S], angular_vel: float) -> list[S]:
     if len(segment) < 2:
         return list(segment)
 
-    x, y, *a_start = segment[0]
-    _, _, *a_end = segment[-1]
+    p = pos(segment[0])
+    a_start = angs(segment[0])
+    a_end = angs(segment[-1])
 
-    if not a_start:
+    if not a_start or not a_end:
         return [segment[0], segment[-1]]
 
     angular_step = angular_vel * DT
-    deltas = [angle_difference(aj, ai) for ai, aj in zip(a_start, a_end)]
+    # interpolate each angle component independently
+    angle_sequences = [linspace_angles(ai, aj, angular_step) for ai, aj in zip(a_start, a_end)]
+    n_steps = max(len(seq) for seq in angle_sequences)
 
-    # per-angle step counts (how many frames each angle needs independently)
-    per_angle_steps = [max(1, math.ceil(abs(d) / angular_step)) for d in deltas]
-    n_steps = max(per_angle_steps)
+    # pad shorter sequences by repeating their final value
+    for seq in angle_sequences:
+        seq.extend([seq[-1]] * (n_steps - len(seq)))
 
     state_type = type(segment[0])
-    resampled: list[S] = []
-    for k in range(n_steps + 1):
-        angles = []
-        for ai, di, ni in zip(a_start, deltas, per_angle_steps):
-            t = min(k / ni, 1.0)
-            angles.append(ai + t * di)
-        resampled.append(state_type(x, y, *angles))
-
-    return resampled
+    return [state_type(*p, *angles) for angles in zip(*angle_sequences)]
 
 
 def resample_path(path: list[S], velocity: float = 3.0, angular_vel: float = math.pi / 2) -> list[S]:
@@ -146,8 +141,11 @@ def resample_path(path: list[S], velocity: float = 3.0, angular_vel: float = mat
     i = 1
 
     while i < len(path):
-        p0  = pos(path[i - 1])
-        p1  = pos(path[i])
+        prior = path[i - 1]
+        current = path[i]
+        p0  = pos(prior)
+        p1  = pos(current)
+
         seg_len = center_distance(p0, p1)
 
         if seg_len < 1e-12:
@@ -161,8 +159,12 @@ def resample_path(path: list[S], velocity: float = 3.0, angular_vel: float = mat
             continue
 
         d = step_size - carry
-        x0, y0, *a0 = path[i - 1]
-        x1, y1, *a1 = path[i]
+        x0, y0 = p0
+        a0 = angs(prior) or []
+
+        x1, y1 = p1
+        a1 = angs(current) or []
+
         while d <= seg_len:
             t = d / seg_len
             x = x0 + t * (x1 - x0)
@@ -178,26 +180,12 @@ def resample_path(path: list[S], velocity: float = 3.0, angular_vel: float = mat
     resampled.append(path[-1])
 
     # compute stats on the resampled path
-    total_dist = 0.0
-    total_heading_change = 0.0
-
-    _, _, *a = resampled[0]
-    has_heading = a is not None
-    for j in range(1, len(resampled)):
-        x0, y0, *a0 = resampled[j - 1]
-        x1, y1, *a1 = resampled[j]
-        total_dist += center_distance((x0, y0), (x1, y1))
-        
-        if has_heading:
-            total_heading_change += angle_distance(a1[0], a0[0])
-
+    total_dist = trajectory_length(resampled, 0)
     n = len(resampled)
     avg_spacing = total_dist / (n - 1) if n > 1 else 0.0
     print(f"[resample_path] {len(path)} -> {n} states | "
           f"velocity = {velocity:.2f} m/s | "
           f"avg spacing = {avg_spacing:.4f} m | "
-          f"total arc length = {total_dist:.2f} m"
-          + (f" | avg angular vel = {total_heading_change / ((n - 1) * DT):.2f} rad/s"
-             if has_heading and n > 1 else ""))
+          f"total arc length = {total_dist:.2f} m")
 
     return resampled

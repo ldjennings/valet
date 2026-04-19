@@ -6,6 +6,7 @@ from shapely.geometry import linestring
 import numpy as np
 import simulator.config as cfg
 from environment import ObstacleEnvironment
+from utils import pos
 
 def scale(points, scale=cfg.METERS_TO_PIXELS):
     return (np.array(points) * scale).tolist()
@@ -50,11 +51,8 @@ def draw_shape(
 
 
 def draw_path(surface: pygame.Surface, path: list[S], color):
-    def extract_xy(state: S):
-        x, y, *_ = state
-        return (x,y)
 
-    coords = map(extract_xy, path)
+    coords = map(pos, path)
     lines = linestring.LineString(coords)
 
     draw_shape(surface, lines, color, True)

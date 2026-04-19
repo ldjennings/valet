@@ -15,6 +15,7 @@ import math
 from shapely.affinity import rotate, translate
 from shapely.geometry import box, Point, LineString
 from shapely.geometry.base import BaseGeometry
+from utils import angs, pos
 
 
 # ── base shape constructors (call once, cache the result) ────────────────
@@ -64,7 +65,7 @@ def place(base: BaseGeometry, x: float, y: float, angle_rad: float) -> BaseGeome
 
 
 def point_geom(base: BaseGeometry, state: PointState) -> BaseGeometry:
-    x, y = state
+    x, y = pos(state)
     return translate(base, xoff=x, yoff=y)
 
 
@@ -86,7 +87,8 @@ def truck_trailer_geom(
     hitch_distance: distance from hitch point (rear axle) to trailer axle center.
     If approximate=True, uses pre-rotated caches instead of exact rotation.
     """
-    x, y, truck_heading, trailer_heading = state
+    x, y = pos(state)
+    truck_heading, trailer_heading = angs(state) or []
 
     if approximate and truck_cache is not None and trailer_cache is not None:
         truck = cached_geom(truck_cache, x, y, truck_heading)

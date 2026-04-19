@@ -163,7 +163,7 @@ class PointBot:
         return center_distance(state, goal) < self.TERMINAL_RADIUS
 
     def heuristic(self, state: PointState, goal: PointState) -> float:
-        return math.hypot(goal.x - state.x, goal.y - state.y)
+        return center_distance(state, goal)
 
     def at_goal(self, state: PointState, goal: PointState) -> bool:
         return center_distance(state, goal) < self.goal_radius_tol
@@ -522,9 +522,11 @@ class TrailerBot:
         states: list[TrailerState] = [start]
 
         for i in range(1, len(raw)):
-            x, y, theta  = raw[i][0], raw[i][1], raw[i][2]
+            x1, y1, theta  = raw[i][0], raw[i][1], raw[i][2]
+            p0 = (raw[i-1][0], raw[i-1][1])
+
             length_sign  = math.copysign(1.0, raw[i][4])  # s[4] = signed segment length; sign = direction
-            ds           = math.hypot(x - raw[i-1][0], y - raw[i-1][1])
+            ds           = center_distance((x1, y1), p0)
 
             # integrate trailer heading along arc (derived from TrailerState.step kinematics)
             phi += length_sign * math.sin(angle_difference(theta, phi)) * ds / self.hitch_distance
@@ -532,7 +534,7 @@ class TrailerBot:
             if angle_distance(theta, phi) > JACKKNIFE_LIMIT:
                 return None
 
-            states.append(TrailerState(x, y, theta, phi))
+            states.append(TrailerState(x1, y1, theta, phi))
 
         return states
 
