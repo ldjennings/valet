@@ -50,7 +50,7 @@ def build_heading_cache(base: BaseGeometry) -> list[BaseGeometry]:
     ]
 
 
-def _lookup(cache: list[BaseGeometry], heading_rad: float) -> BaseGeometry:
+def lookup_cached(cache: list[BaseGeometry], heading_rad: float) -> BaseGeometry:
     """Find the closest pre-rotated shape for a given heading."""
     idx = round(heading_rad % (2 * math.pi) / (2 * math.pi) * HEADING_CACHE_SIZE) % HEADING_CACHE_SIZE
     return cache[idx]
@@ -71,16 +71,16 @@ def point_geom(base: BaseGeometry, state: PointState) -> BaseGeometry:
 
 def cached_geom(cache: list[BaseGeometry], x: float, y: float, heading_rad: float) -> BaseGeometry:
     """Look up the nearest pre-rotated shape and translate to (x, y)."""
-    return translate(_lookup(cache, heading_rad), xoff=x, yoff=y)
+    return translate(lookup_cached(cache, heading_rad), xoff=x, yoff=y)
 
 
 def truck_trailer_geom(
-    truck_base: BaseGeometry, trailer_base: BaseGeometry,
-    state: TrailerState, hitch_distance: float,
-    truck_cache: list[BaseGeometry] | None = None,
-    trailer_cache: list[BaseGeometry] | None = None,
-    approximate: bool = False,
-) -> list[BaseGeometry]:
+    state: TrailerState,
+    truck_base: BaseGeometry,
+    trailer_base: BaseGeometry,
+    hitch_distance: float,
+
+) -> list[tuple[float, float, BaseGeometry]]:
     """
     Returns [connection, truck, trailer] as separate geometries.
 
@@ -90,19 +90,64 @@ def truck_trailer_geom(
     x, y = pos(state)
     truck_heading, trailer_heading = angs(state) or []
 
-    if approximate and truck_cache is not None and trailer_cache is not None:
-        truck = cached_geom(truck_cache, x, y, truck_heading)
-    else:
-        truck = place(truck_base, x, y, truck_heading)
+
+    truck = place(truck_base, x, y, truck_heading)
 
     x_t = x - hitch_distance * math.cos(trailer_heading)
     y_t = y - hitch_distance * math.sin(trailer_heading)
 
-    if approximate and truck_cache is not None and trailer_cache is not None:
-        trailer = cached_geom(trailer_cache, x_t, y_t, trailer_heading)
-    else:
-        trailer = place(trailer_base, x_t, y_t, trailer_heading)
+    trailer = place(trailer_base, x_t, y_t, trailer_heading)
 
     connection = LineString([(x, y), (x_t, y_t)])
 
-    return [connection, truck, trailer]
+    return [(0, 0, connection), (0, 0, truck), (0, 0, trailer)]
+
+def truck_trailer_approximate(
+    state: TrailerState, hitch_distance: float,
+    truck_cache: list[BaseGeometry],
+    trailer_cache: list[BaseGeometry],
+) -> list[tuple[float, float, BaseGeometry]]:
+    x, y, truck_h, trailer_h = state
+
+    x_t = x - hitch_distance * math.cos(trailer_h)
+    y_t = y - hitch_distance * math.sin(trailer_h)
+    connection = LineString([(x, y), (x_t, y_t)])
+
+
+    truck   = lookup_cached(truck_cache, truck_h)
+    trailer = lookup_cached(trailer_cache, trailer_h)
+    return [(0, 0, connection), (x, y, truck), (x_t, y_t, trailer)]
+
+
+# def truck_trailer_geom(
+#     truck_base: BaseGeometry, trailer_base: BaseGeometry,
+#     state: TrailerState, hitch_distance: float,
+#     truck_cache: list[BaseGeometry] | None = None,
+#     trailer_cache: list[BaseGeometry] | None = None,
+#     approximate: bool = False,
+# ) -> list[BaseGeometry]:
+#     """
+#     Returns [connection, truck, trailer] as separate geometries.
+
+#     hitch_distance: distance from hitch point (rear axle) to trailer axle center.
+#     If approximate=True, uses pre-rotated caches instead of exact rotation.
+#     """
+#     x, y = pos(state)
+#     truck_heading, trailer_heading = angs(state) or []
+
+#     if approximate and truck_cache is not None and trailer_cache is not None:
+#         truck = cached_geom(truck_cache, x, y, truck_heading)
+#     else:
+#         truck = place(truck_base, x, y, truck_heading)
+
+#     x_t = x - hitch_distance * math.cos(trailer_heading)
+#     y_t = y - hitch_distance * math.sin(trailer_heading)
+
+#     if approximate and truck_cache is not None and trailer_cache is not None:
+#         trailer = cached_geom(trailer_cache, x_t, y_t, trailer_heading)
+#     else:
+#         trailer = place(trailer_base, x_t, y_t, trailer_heading)
+
+#     connection = LineString([(x, y), (x_t, y_t)])
+
+#     return [connection, truck, trailer]

@@ -17,17 +17,21 @@ from Bots.BotState import (
     CarState,
     TrailerState,
 )
-from utils import angle_difference, angs, center_distance, angle_distance, linspace_angles, linspace_xy, rs_path_sample, steps_to_cover
+from utils import angle_difference, pos, angs, center_distance, angle_distance, linspace_angles, linspace_xy, rs_path_sample, steps_to_cover
 from Bots.geometry_helpers import (
-    point_geom, place, cached_geom, truck_trailer_geom,
+    point_geom, place, truck_trailer_approximate, truck_trailer_geom,
     make_point_base, make_centered_rect_base, make_axle_rect_base,
-    build_heading_cache,
+    build_heading_cache, lookup_cached,
 )
 
 import math
-from typing import Protocol
+from typing import Protocol, TypeAlias
 from shapely.geometry.base import BaseGeometry
 import pygame
+
+# (x_offset, y_offset, geometry) — offset is applied to bounds for cheap AABB checks;
+# geometry is only translated for the rare STRtree check.
+FootprintEntry: TypeAlias = tuple[float, float, BaseGeometry]
 
 # Simulation timestep in seconds. All step() kinematics use this value.
 DT = 1 / 30
@@ -74,9 +78,11 @@ class Bot(Protocol[S]):
         """Planning speed in m/s. Used by propagated_primitives to scale arc length to grid spacing."""
         ...
 
-    def footprint(self, state: S, approximate: bool = False) -> list[BaseGeometry]:
-        """Returns the robot's collision geometries at the given state as a list of Shapely objects.
-        If approximate=True, uses a cached rotation (snapped to nearest 5°) for speed."""
+    def footprint(self, state: S, approximate: bool = False) -> list[FootprintEntry]:
+        """Returns the robot's collision geometries as (x_offset, y_offset, geometry) tuples.
+        Translating shapely geometry is suprisingly expensive, for now the following applies as an optimization:
+        If approximate=True, geometry is pre-rotated but NOT translated — offset is (x, y).
+        If approximate=False, geometry is fully placed — offset is (0, 0)."""
         ...
 
     def generate_trajectory(self, start: S, goal: S, resolution: float = 0.1) -> list[S] | None:
@@ -185,8 +191,11 @@ class PointBot(BotBase):
         self.goal_radius_tol = goal_radius_tol
         self._base = make_point_base()
 
-    def footprint(self, state: PointState, approximate: bool = False) -> list[BaseGeometry]:
-        return [point_geom(self._base, state)]
+    def footprint(self, state: PointState, approximate: bool = False) -> list[FootprintEntry]:
+        x, y = pos(state)
+        if approximate:
+            return [(x, y, self._base)]
+        return [(0, 0, point_geom(self._base, state))]
 
     def generate_trajectory(
         self, start: PointState, goal: PointState, resolution: float = 0.1
@@ -255,10 +264,11 @@ class DiffBot(BotBase):
         self._cache = build_heading_cache(self._base)
 
 
-    def footprint(self, state: DiffState, approximate: bool = False) -> list[BaseGeometry]:
+    def footprint(self, state: DiffState, approximate: bool = False) -> list[FootprintEntry]:
+        x, y, h = state.center_x, state.center_y, state.heading_rad
         if approximate:
-            return [cached_geom(self._cache, state.center_x, state.center_y, state.heading_rad)]
-        return [place(self._base, state.center_x, state.center_y, state.heading_rad)]
+            return [(x, y, lookup_cached(self._cache, h))]
+        return [(0, 0, place(self._base, x, y, h))]
 
     def generate_trajectory(
         self, start: DiffState, goal: DiffState, resolution: float = 0.1
@@ -361,10 +371,11 @@ class CarBot(BotBase):
         self._cache = build_heading_cache(self._base)
 
 
-    def footprint(self, state: CarState, approximate: bool = False) -> list[BaseGeometry]:
+    def footprint(self, state: CarState, approximate: bool = False) -> list[FootprintEntry]:
+        x, y, h = state.rear_axle_x, state.rear_axle_y, state.heading_rad
         if approximate:
-            return [cached_geom(self._cache, state.rear_axle_x, state.rear_axle_y, state.heading_rad)]
-        return [place(self._base, state.rear_axle_x, state.rear_axle_y, state.heading_rad)]
+            return [(x, y, lookup_cached(self._cache, h))]
+        return [(0, 0, place(self._base, x, y, h))]
 
     def generate_trajectory(self, start: CarState, goal: CarState, resolution: float = 0.1) -> list[CarState] | None:
         raw = rs_path_sample(start, goal, self.turning_radius, resolution)
@@ -449,11 +460,11 @@ class TrailerBot(BotBase):
 
 
 
-    def footprint(self, state: TrailerState, approximate: bool = False) -> list[BaseGeometry]:
-        return truck_trailer_geom(
-            self._truck_base, self._trailer_base, state, self.hitch_distance,
-            self._truck_cache, self._trailer_cache, approximate,
-        )
+    def footprint(self, state: TrailerState, approximate: bool = False) -> list[FootprintEntry]:
+        if approximate:
+            return truck_trailer_approximate(state, self.hitch_distance, self._truck_cache, self._trailer_cache)
+        else:
+            return truck_trailer_geom(state, self._truck_base, self._trailer_base, self.hitch_distance)
 
     def generate_trajectory(
         self, start: TrailerState, goal: TrailerState, resolution: float = 0.1
@@ -462,7 +473,6 @@ class TrailerBot(BotBase):
         if raw is None:
             return None
 
-        JACKKNIFE_LIMIT = math.pi / 2
 
         phi    = start.trailer_heading_rad
         states: list[TrailerState] = [start]
@@ -477,12 +487,14 @@ class TrailerBot(BotBase):
             # integrate trailer heading along arc (derived from TrailerState.step kinematics)
             phi += length_sign * math.sin(angle_difference(theta, phi)) * ds / self.hitch_distance
 
-            if angle_distance(theta, phi) > JACKKNIFE_LIMIT:
+            if angle_distance(theta, phi) > self.JACKKNIFE_LIMIT:
                 return None
 
             states.append(TrailerState(x1, y1, theta, phi))
 
         return states
+
+    JACKKNIFE_LIMIT = math.pi / 2
 
     def propagate(self, state: TrailerState, spacing: float, angular_spacing: float, steering_granularity: int) -> list[list[TrailerState]]:
         deltas = [
@@ -499,10 +511,20 @@ class TrailerBot(BotBase):
                     n_steps = max(n_xy, n_heading)
                 else:
                     n_steps = n_xy
+
                 traj: list[TrailerState] = [state]
+
+                jackknifed = False
                 for _ in range(n_steps):
-                    traj.append(traj[-1].step(v, delta, self.wheelbase, self.hitch_distance, DT))
-                trajectories.append(traj)
+                    next_state = traj[-1].step(v, delta, self.wheelbase, self.hitch_distance, DT)
+                    if angle_distance(next_state.heading_rad, next_state.trailer_heading_rad) > self.JACKKNIFE_LIMIT:
+                        jackknifed = True
+                        break
+                    traj.append(next_state)
+
+                if not jackknifed:
+                    trajectories.append(traj)
+
         return trajectories
 
     def handle_input(self, state: TrailerState, speed: float) -> TrailerState:

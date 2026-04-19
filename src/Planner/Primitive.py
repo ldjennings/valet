@@ -1,5 +1,5 @@
-from Bots import S, Bot
-from utils import angle_distance, angs, center_distance, heading, pos, trajectory_length, wrap_angle
+from Bots import S, Bot, PointState
+from utils import angle_distance, center_distance, direction, heading, trajectory_length
 from typing import Generic
 from dataclasses import dataclass
 from Planner.AstarConfig import HybridConfig
@@ -29,18 +29,21 @@ ROTATION_COST_WEIGHT = 0.5  # cost per radian of heading change; keeps rotate-in
 
 def _is_reverse(traj: list) -> bool:
     """True if the primitive moves opposite to the starting heading (reverse gear)."""
-    heading = angs(traj[0])
+    start = traj[0]
+    next = traj[1]
 
-    if not heading:
+    if isinstance(start, PointState):
         return False  # PointBot has no heading
 
-    x1, y1 = pos(traj[0])
-    x2, y2 = pos(traj[1])
-
-    dx, dy = x2 - x1, y2 - y1
-    if math.hypot(dx, dy) < 1e-6:
+    if center_distance(start, next) < 1e-6:
         return False  # pure rotation, not reverse
-    return (dx * math.cos(heading[0]) + dy * math.sin(heading[0])) < 0
+
+    h = heading(start)
+    assert h is not None
+
+    # check to see if the angle between the current heading and the direction of the next state is
+    # greater than 90 degrees
+    return angle_distance(direction(start, next), h) > math.pi / 2
 
 
 def propagated_primitives(bot: Bot, state: S, config: HybridConfig, steering_granularity: int = 3) -> list[Primitive]:

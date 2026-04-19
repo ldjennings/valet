@@ -49,27 +49,28 @@ def reconstruct_path(node: SearchNode[S], final_path: list[S] = []) -> list[S]:
 
 def validate_path(
     obstacles: ObstacleEnvironment, bot: Bot, path: list[S],
-    coarse_step: int = 4, fine: bool = True,
+    coarse_step: int = 4, fine_checking: bool = True,
 ) -> bool:
     # this is the most expensive method in the whole program, so steps have been taken to optimize it.
 
     # Phase 1: Check sparse subset (endpoint + every Nth).
     # Uses approximate (cached) footprints for speed during search.
 
-    # always check last state
-    if not obstacles.is_valid_state(bot.footprint(path[-1], approximate=fine)):
+    # always check last state, exit early if invalid
+    if not obstacles.is_valid_state(bot.footprint(path[-1], approximate= not fine_checking)):
         return False
 
+    # check every nth state in trajectory
     for i in range(0, len(path), coarse_step):
-        if not obstacles.is_valid_state(bot.footprint(path[i], approximate=fine)):
+        if not obstacles.is_valid_state(bot.footprint(path[i], approximate= not fine_checking)):
             return False
 
-    if fine:
+    if fine_checking:
         # Optional Phase 2: check remaining states.
         for i in range(len(path)):
             if i % coarse_step == 0:
                 continue
-            if not obstacles.is_valid_state(bot.footprint(path[i], approximate=fine)):
+            if not obstacles.is_valid_state(bot.footprint(path[i], approximate= False)):
                 return False
 
     return True
@@ -158,7 +159,7 @@ def hybrid_astar(
             attempted_path = bot.generate_trajectory(current, goal)
 
             if attempted_path is not None \
-                and validate_path(env, bot, attempted_path, fine=config.fine_collision) \
+                and validate_path(env, bot, attempted_path, fine_checking=config.fine_collision) \
                 and bot.at_goal(attempted_path[-1], goal):
 
                 print(f"[hybrid_astar] found path: {len(visited)} expansions, "
@@ -175,7 +176,7 @@ def hybrid_astar(
             endpoint = prim.endpoint
             endpoint_key = discretize(endpoint, config)
 
-            if not validate_path(env, bot, prim.trajectory, fine=config.fine_collision):
+            if not validate_path(env, bot, prim.trajectory, fine_checking=config.fine_collision):
                 continue
 
             tentative_g = node.g_cost + prim.cost

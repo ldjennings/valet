@@ -25,9 +25,9 @@ def draw_frame(
     if path:
         draw_path(surface, path, cfg.GRAY)
 
-    for g in bot.footprint(goal):
+    for _, _, g in bot.footprint(goal):
         draw_shape(surface, g, cfg.YELLOW, True, cfg.BLACK)
-    for g in bot.footprint(state):
+    for _, _, g in bot.footprint(state):
         draw_shape(surface, g, cfg.GREEN, True, cfg.BLACK)
 
 def draw_to_screen(screen: pygame.Surface, virtual_screen: pygame.Surface):
