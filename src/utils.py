@@ -65,6 +65,13 @@ def center_distance(s1, s2) -> float:
     return math.hypot(x2 - x1, y2 - y1)
 
 
+def direction(s1, s2) -> float:
+    """Angle in radians from s1 to s2."""
+    x1, y1 = pos(s1)
+    x2, y2 = pos(s2)
+    return math.atan2(y2 - y1, x2 - x1)
+
+
 def lerp_angle(a: float, b: float, t: float) -> float:
     """Linearly interpolate between angles a and b, handling wrapping."""
     return a + t * wrap_angle(b - a)

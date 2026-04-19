@@ -33,6 +33,7 @@ def reconstruct_path(node: SearchNode[S], final_path: list[S] = []) -> list[S]:
     while node.parent is not None:
         arcs.append(node.trajectory)
         node = node.parent
+
     arcs.reverse()
     path = []
     for arc in arcs:
