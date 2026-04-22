@@ -1,5 +1,5 @@
 
-import simulator.config as cfg
+import config as cfg
 from simulator import MP4Recorder, NoOpRecorder, Renderer, BotBundle, make_bot
 from environment import ObstacleEnvironment
 from Planner import hybrid_astar, HybridConfig

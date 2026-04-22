@@ -1,5 +1,5 @@
 from typing import Generic
-import simulator.config as cfg
+import config as cfg
 from Bots import Bot, S
 from environment.obstacle import ObstacleEnvironment
 from simulator.draw import draw_grid, draw_path, draw_shape, draw_visited

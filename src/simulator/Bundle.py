@@ -9,7 +9,6 @@ from Bots.Bots import Bot, PointBot, DiffBot, CarBot, TrailerBot
 from Bots.BotState import S, PointState, DiffState, CarState, TrailerState
 from typing import Generic
 from dataclasses import dataclass
-import simulator.config as cfg
 
 
 @dataclass
@@ -46,49 +45,26 @@ def make_bot(
     match geom:
         case "point":
             return BotBundle(
-                PointBot(
-                    goal_radius_tol     =  cfg.GOAL_RADIUS_TOLERANCE
-                ),
+                PointBot(),
                 PointState(start[0], start[1]), PointState(goal[0], goal[1])
             )
 
         case "diff":
             return BotBundle(
-                DiffBot(
-                    length              = cfg.ROBOT_LENGTH_METERS,
-                    width               = cfg.ROBOT_WIDTH_METERS,
-                    goal_radius_tol     = cfg.GOAL_RADIUS_TOLERANCE,
-                    goal_heading_tol    = cfg.GOAL_HEADING_TOLERANCE
-                ),
+                DiffBot(),
                 DiffState(start[0], start[1], 0),
                 DiffState(goal[0], goal[1], 0),
             )
 
         case "car":
             return BotBundle(
-                CarBot(
-                    wheelbase           = cfg.CAR_WHEELBASE_METERS,
-                    length              = cfg.CAR_LENGTH_METERS,
-                    width               = cfg.CAR_WIDTH_METERS,
-                    goal_radius_tol     = cfg.GOAL_RADIUS_TOLERANCE,
-                    goal_heading_tol    = cfg.GOAL_HEADING_TOLERANCE
-                ),
+                CarBot(),
                 CarState(start[0], start[1], 0), CarState(goal[0], goal[1], 0)
             )
 
         case "trailer":
             return BotBundle(
-                TrailerBot(
-                    wheelbase           = cfg.TRUCK_WHEELBASE_METERS,
-                    length              = cfg.TRUCK_LENGTH_METERS,
-                    width               = cfg.TRUCK_WIDTH_METERS,
-                    hitch_distance      = cfg.TRUCK_HITCH_TO_TRAILER_AXLE,
-                    trailer_length      = cfg.TRAILER_LENGTH_METERS,
-                    trailer_width       = cfg.TRAILER_WIDTH_METERS,
-                    goal_radius_tol     = cfg.GOAL_RADIUS_TOLERANCE,
-                    goal_heading_tol    = cfg.GOAL_HEADING_TOLERANCE,
-                    trailer_heading_tol = cfg.TRAILER_HEADING_TOLERANCE
-                ),
+                TrailerBot(),
                 TrailerState(start[0], start[1], 0, 0),
                 TrailerState(goal[0], goal[1], 0, 0),
             )

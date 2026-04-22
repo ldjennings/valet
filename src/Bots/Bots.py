@@ -28,6 +28,7 @@ import math
 from typing import Protocol, TypeAlias
 from shapely.geometry.base import BaseGeometry
 import pygame
+import config as cfg
 
 # (x_offset, y_offset, geometry) — offset is applied to bounds for cheap AABB checks;
 # geometry is only translated for the rare STRtree check.
@@ -196,7 +197,7 @@ class PointBot(BotBase):
 
     TERMINAL_RADIUS = 10.0
 
-    def __init__(self, goal_radius_tol: float = 0.25):
+    def __init__(self, goal_radius_tol: float = cfg.GOAL_RADIUS_TOLERANCE):
         self.goal_radius_tol = goal_radius_tol
         self._base = make_point_base()
 
@@ -262,10 +263,10 @@ class DiffBot(BotBase):
 
     def __init__(
         self,
-        length: float = 0.7,
-        width: float = 0.57,
-        goal_radius_tol: float = 0.25,
-        goal_heading_tol: float = math.pi / 12,
+        length: float = cfg.ROBOT_LENGTH_METERS,
+        width: float = cfg.ROBOT_WIDTH_METERS,
+        goal_radius_tol: float = cfg.GOAL_RADIUS_TOLERANCE,
+        goal_heading_tol: float = cfg.GOAL_HEADING_TOLERANCE,
     ):
         self.goal_radius_tol = goal_radius_tol
         # self.angular_tolerances = (goal_heading_tol,)
@@ -370,11 +371,11 @@ class CarBot(BotBase):
 
     def __init__(
         self,
-        wheelbase: float = 2.8,
-        length: float = 5.2,
-        width: float = 1.8,
-        goal_radius_tol: float = 0.25,
-        goal_heading_tol: float = math.pi / 12,
+        wheelbase: float = cfg.CAR_WHEELBASE_METERS,
+        length: float = cfg.CAR_LENGTH_METERS,
+        width: float = cfg.CAR_WIDTH_METERS,
+        goal_radius_tol: float = cfg.GOAL_RADIUS_TOLERANCE,
+        goal_heading_tol: float = cfg.GOAL_HEADING_TOLERANCE,
     ):
         self.wheelbase = wheelbase
         self.turning_radius = wheelbase / math.tan(self.MAX_STEER)
@@ -452,15 +453,15 @@ class TrailerBot(BotBase):
 
     def __init__(
         self,
-        wheelbase: float = 3.4,
-        length: float = 5.4,
-        width: float = 2.0,
-        hitch_distance: float = 5.0,
-        trailer_length: float = 4.5,
-        trailer_width: float = 2.0,
-        goal_radius_tol: float = 0.25,
-        goal_heading_tol: float = math.pi / 12,
-        trailer_heading_tol: float = math.pi / 32,
+        wheelbase: float = cfg.TRUCK_WHEELBASE_METERS,
+        length: float = cfg.TRUCK_LENGTH_METERS,
+        width: float = cfg.TRUCK_WIDTH_METERS,
+        hitch_distance: float = cfg.TRUCK_HITCH_TO_TRAILER_AXLE,
+        trailer_length: float = cfg.TRAILER_LENGTH_METERS,
+        trailer_width: float = cfg.TRAILER_WIDTH_METERS,
+        goal_radius_tol: float = cfg.GOAL_RADIUS_TOLERANCE,
+        goal_heading_tol: float = cfg.GOAL_HEADING_TOLERANCE,
+        trailer_heading_tol: float = cfg.TRAILER_HEADING_TOLERANCE,
     ):
         self.wheelbase = wheelbase
         self.hitch_distance = hitch_distance

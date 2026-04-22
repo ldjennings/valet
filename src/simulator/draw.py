@@ -4,7 +4,7 @@ import pygame.gfxdraw
 from Bots import S
 from shapely.geometry import linestring
 import numpy as np
-import simulator.config as cfg
+import config as cfg
 from environment import ObstacleEnvironment
 
 def scale(points, scale=cfg.METERS_TO_PIXELS):
