@@ -87,7 +87,7 @@ class ObstacleEnvironment:
 
         return False
 
-    def _geom_AABB_grid_check(self, bounds) -> bool:
+    def has_possible_collision(self, bounds) -> bool:
         """
         Fast broad-phase collision check between a geometry and the occupancy grid.
 
@@ -155,7 +155,7 @@ class ObstacleEnvironment:
                 return False
 
             # Broad-phase rejection
-            if not self._geom_AABB_grid_check(bounds):
+            if not self.has_possible_collision(bounds):
                 continue
 
             # Very rare, also very expensive. Not called in the majority of cases.

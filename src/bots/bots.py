@@ -210,10 +210,6 @@ class PointBot(BotBase):
     def generate_trajectory(
         self, start: PointState, goal: PointState, resolution: float = 0.1
     ) -> list[PointState] | None:
-            # unpack into tuples
-            # (x1, y1) = start
-            # (x2, y2) = goal
-
             return [PointState(*p) for p in linspace_xy(start.position(), goal.position(), resolution)]
 
     def propagate(self, state: PointState, spacing: float, angular_spacing: float, steering_granularity: int) -> list[list[PointState]]:
@@ -269,7 +265,6 @@ class DiffBot(BotBase):
         goal_heading_tol: float = cfg.GOAL_HEADING_TOLERANCE,
     ):
         self.goal_radius_tol = goal_radius_tol
-        # self.angular_tolerances = (goal_heading_tol,)
         self.goal_heading_tol = goal_heading_tol
         self._base = make_centered_rect_base(length, width)
         self._cache = build_heading_cache(self._base)
@@ -290,8 +285,7 @@ class DiffBot(BotBase):
         so no accumulation error or overshoot.
         """
         states: list[DiffState] = []
-        # sx, sy, sh = start
-        # gx, gy, gh = goal
+
         p1 = start.position()
         p2 = goal.position()
 
@@ -312,8 +306,6 @@ class DiffBot(BotBase):
 
         # Phase 3: rotate to goal heading
         if angle_distance(goal.heading_rad, heading_after_drive) > 1e-6:
-            # for a in linspace_angles(heading_after_drive, goal.heading_rad, resolution):
-            #     states.append(DiffState(gx, gy, a))
             states.extend(states[-1].pure_rotation_linspace(goal, resolution))
 
         return states
@@ -381,7 +373,6 @@ class CarBot(BotBase):
         self.turning_radius = wheelbase / math.tan(self.MAX_STEER)
         self.goal_radius_tol = goal_radius_tol
         self.goal_heading_tol = goal_heading_tol
-        # self.angular_tolerances = (goal_heading_tol,)
         self._base = make_axle_rect_base(wheelbase, length, width)
         self._cache = build_heading_cache(self._base)
 

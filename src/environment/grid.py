@@ -7,7 +7,7 @@ realistic-looking clustered obstacles rather than uniform random noise.
 """
 
 import numpy as np
-import numpy.random as random
+import numpy.random as nprandom
 
 
 
@@ -47,7 +47,7 @@ def populate_grid(grid_shape: tuple[int, int], probability: float, seed: int | N
 
     assert 0 <= probability <= 1.0, "probability not valid, must be in [0, 1]"
 
-    rng = np.random.default_rng(seed)
+    rng = nprandom.default_rng(seed)
     num_rows, num_cols = grid_shape
 
     grid = np.zeros((num_rows, num_cols), dtype=int)
@@ -55,7 +55,7 @@ def populate_grid(grid_shape: tuple[int, int], probability: float, seed: int | N
     num_cells_expected = int(num_rows * num_cols * probability)
 
     while grid.sum() < num_cells_expected:
-        tet_type = rng.integers(0, len(tetrominoes) - 1, endpoint=True)
+        tet_type = int(rng.integers(0, len(tetrominoes) - 1, endpoint=True))
 
         shape = tetrominoes[tet_type]
 

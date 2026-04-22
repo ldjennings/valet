@@ -47,7 +47,7 @@ def draw_shape(
             draw_shape(surface, g, color, outline, outline_color)
 
     else:
-        ValueError(f"unimplemented geometry type: {geom.geom_type}")
+        raise ValueError(f"unimplemented geometry type: {geom.geom_type}")
 
 
 def draw_path(surface: pygame.Surface, path: list[S], color):
@@ -99,12 +99,12 @@ def draw_frame(
 def draw_to_screen(screen: pygame.Surface, virtual_screen: pygame.Surface):
     # Preserving aspect ratio
     window_width, window_height = screen.get_size()
-    scale = min(window_width / cfg.VIRTUAL_SIZE[0], window_height / cfg.VIRTUAL_SIZE[1])
+    scale_factor = min(window_width / cfg.VIRTUAL_SIZE[0], window_height / cfg.VIRTUAL_SIZE[1])
 
     # scaling the virtual surface to the actual screen size
     scaled_surface = pygame.transform.smoothscale(
         virtual_screen,
-        (int(cfg.VIRTUAL_SIZE[0] * scale), int(cfg.VIRTUAL_SIZE[1] * scale)),
+        (int(cfg.VIRTUAL_SIZE[0] * scale_factor), int(cfg.VIRTUAL_SIZE[1] * scale_factor)),
     )
     # centering the screen
     offset = (

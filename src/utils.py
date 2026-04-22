@@ -25,16 +25,12 @@ def wrap_angle(delta: float) -> float:
 
 
 def angle_distance(a: float, b: float) -> float:
-    """Absolute angular difference from b to a, wrapped to [-π, π]. Equivalent to abs(wrap_angle(a - b)).
-    can optionally
-    """
+    """Absolute angular difference from b to a, wrapped to [0, π]. Equivalent to abs(wrap_angle(a - b))."""
     return abs(wrap_angle(a - b))
 
 
 def angle_difference(a: float, b: float) -> float:
-    """Angular difference from b to a, wrapped to [-π, π]. Equivalent to wrap_angle(a - b).
-    can optionally
-    """
+    """Angular difference from b to a, wrapped to [-π, π]. Equivalent to wrap_angle(a - b)."""
     return wrap_angle(a - b)
 
 
@@ -52,28 +48,6 @@ def linspace_angles(a: float, b: float, resolution: float) -> list[float]:
     return [float(h) for h in np.linspace(a, a + delta, n)]
 
 
-# def pos(state) -> tuple[float, float]:
-#     """Extract the (x, y) position from any state type via __iter__."""
-#     x, y, *_ = state
-#     return (x, y)
-
-
-# def angs(state) -> tuple[float, ...] | None:
-#     """Extract angle components (heading, trailer heading, ...) from a state."""
-#     _, _, *rest = state
-#     if rest is None:
-#         return None
-#     else:
-#         return tuple(rest)
-
-# def heading(state) -> float | None:
-#     """Extract heading from a state. Returns None if not present"""
-#     _, _, rest, *_ = state
-#     if rest is None:
-#         return None
-#     else:
-#         return rest
-
 
 def center_distance(p1: Position, p2: Position) -> float:
     """Euclidean distance between the position components of two states."""
@@ -87,8 +61,6 @@ def direction(p1: Position, p2: Position) -> float:
     x1, y1 = p1
     x2, y2 = p2
     return math.atan2(y2 - y1, x2 - x1)
-
-
 
 
 
@@ -115,9 +87,7 @@ def rs_path_sample(start: Pose, goal: Pose, turning_radius: float, resolution: f
     Sample a Reeds-Shepp path between two states.
     Returns the raw sample list from pyReedsShepp, or None if the path is empty.
     """
-    # x0, y0, h0, = start.pose()
-    # x1, y1, h1  = goal.pose()
-    # raw = reeds_shepp.path_sample((x0, y0, h0), (x1, y1, h1), turning_radius, resolution)
+
     raw = reeds_shepp.path_sample(start, goal, turning_radius, resolution)
     return raw if raw else None
 

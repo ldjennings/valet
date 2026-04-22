@@ -115,37 +115,3 @@ def truck_trailer_approximate(
     truck   = lookup_cached(truck_cache, truck_h)
     trailer = lookup_cached(trailer_cache, trailer_h)
     return [(0, 0, connection), (x, y, truck), (x_t, y_t, trailer)]
-
-
-# def truck_trailer_geom(
-#     truck_base: BaseGeometry, trailer_base: BaseGeometry,
-#     state: TrailerState, hitch_distance: float,
-#     truck_cache: list[BaseGeometry] | None = None,
-#     trailer_cache: list[BaseGeometry] | None = None,
-#     approximate: bool = False,
-# ) -> list[BaseGeometry]:
-#     """
-#     Returns [connection, truck, trailer] as separate geometries.
-
-#     hitch_distance: distance from hitch point (rear axle) to trailer axle center.
-#     If approximate=True, uses pre-rotated caches instead of exact rotation.
-#     """
-#     x, y = pos(state)
-#     truck_heading, trailer_heading = angs(state) or []
-
-#     if approximate and truck_cache is not None and trailer_cache is not None:
-#         truck = cached_geom(truck_cache, x, y, truck_heading)
-#     else:
-#         truck = place(truck_base, x, y, truck_heading)
-
-#     x_t = x - hitch_distance * math.cos(trailer_heading)
-#     y_t = y - hitch_distance * math.sin(trailer_heading)
-
-#     if approximate and truck_cache is not None and trailer_cache is not None:
-#         trailer = cached_geom(trailer_cache, x_t, y_t, trailer_heading)
-#     else:
-#         trailer = place(trailer_base, x_t, y_t, trailer_heading)
-
-#     connection = LineString([(x, y), (x_t, y_t)])
-
-#     return [connection, truck, trailer]
