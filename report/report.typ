@@ -21,11 +21,44 @@ I chose to represent the state of the world using a numpy array, with different 
 
 The hero uses A\* with a Manhattan distance heuristic to decide its next move, with that being recalculated with every step taken. Using D\* would be more appropriate due to the changing environment, but I used A\* because it was simpler to implement.
 
-For collision detection, I chose to use #link("https://shapely.readthedocs.io/en/stable/")[shapely], a third-party python library used to model and manipulate geometry.
 
-This significantly reduced the difficulty of doing collision detection, and reduced the technical debt.
 
-Rather than implementing a series of more granular checks, like checking points along the robot perimiter, then using hte separating axis theorem or similar, I only needed to define the vehicles and environment geometrically and then call the `intersects` method with the two.
+ === Collision Detection
+
+For collision detection, I initially chose to use #link("https://shapely.readthedocs.io/en/stable/")[shapely], a third-party python library used to model and manipulate geometry. The main reason for doing so was to develop the rest of the program without needing to take the time to figure out all the details of collision detection.
+
+However, this approach soon ran into performance issues. While shapely is fairly performant by default, it also has to deal with much more overhead due to being a fully featured geometry library. It encompasses concepts like [TODO], while this assignment mostly deals with collisions between boxes, most of them on an axis aligned regular grid. When the collision detector/state validation function can run tens, even hundreds of thousands of times at times, that overhead quickly adds up.
+
+To deal with this, I focused on three different approaches: caching approximate rotations of each geometry, reducing the number of states that need to be checked, and eliminating states that can be easily validated.
+
+==== State validator
+```py
+    def is_valid_state(self, bot_geoms: list[FootprintEntry]) -> bool:
+        """Return True if none of the geometries intersect any obstacle and all lie within the boundary."""
+        for ox, oy, g in bot_geoms:
+            minx, miny, maxx, maxy = g.bounds
+            bounds = (minx + ox, miny + oy, maxx + ox, maxy + oy)
+
+            if not self._within_bounds(bounds):
+                return False
+
+            # Broad-phase rejection
+            if not self.has_possible_collision(bounds):
+                continue
+
+            # Very rare, also very expensive. Not called in the majority of cases.
+            # Only translate if the geometry isn't already placed.
+            if ox != 0.0 or oy != 0.0:
+                positioned = translate(g, xoff=ox, yoff=oy)
+            else:
+                positioned = g
+            if intersects_any(self.obstacles, positioned):
+                return False
+
+        return True
+```
+
+At the fundamental level the state validator works with shapely: defining the vehicles and environment geometrically and then call the `intersects` method with the two. I did start using the C API for shapely, and stored the obstacles as an #link("https://shapely.readthedocs.io/en/stable/strtree.html#shapely.STRtree")[STRTree], but its still the same idea. I could likely replace this with an implementation of the Separating Axis Theorem, but I didn't believe it was worth the time to do so. According to #link("https://docs.python.org/3/library/profile.html")[Cprofile], calls to the STRtree function only take up 1% of the hybrid A\* runtime #footnote[Ran with a seed of 11, grid spacing of 1, angular spacing of $frac(pi, 3)$], so I decided to focus on improving other parts of the program.
 
 As an example, the code for defining the trailer geometry can be seen below. It constructs two rectangles using the constants described in the assignment and the current state variables:
 
