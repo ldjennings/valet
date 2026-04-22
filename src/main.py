@@ -1,5 +1,6 @@
 import argparse
 import math
+import random
 
 import config as cfg
 from simulator import make_bot
@@ -63,10 +64,11 @@ def _make_scenario(bot_type: str, seed: int | None):
 
     bundle      = make_bot(bot_type, startxy, goalxy)
     environment = ObstacleEnvironment(
-        (cfg.NUM_ROWS, cfg.NUM_COLS), cfg.CELLS_TO_METERS,
-        proportion_filled=0.1,
-        trailer=(bot_type == "trailer"),
-        seed=seed,
+        grid_shape          = (cfg.NUM_ROWS, cfg.NUM_COLS),
+        cell_size_meters    = cfg.CELLS_TO_METERS,
+        proportion_filled   = cfg.OBSTACLE_COVERAGE,
+        trailer             = (bot_type == "trailer"),
+        seed                = seed,
     )
     return bundle, environment
 
@@ -74,8 +76,10 @@ def _make_scenario(bot_type: str, seed: int | None):
 def main() -> None:
     args = parse_args()
 
-    bundle, environment = _make_scenario(args.bot_type, args.seed)
-    config = HybridConfig(spacing=1, angular_spacing=math.pi / 3, max_iterations=15000, fine_collision=False)
+    seed = args.seed if args.seed is not None else random.randint(0, 2**32 - 1)
+    print(f"Using seed: {seed}  (re-run with -s {seed} to reproduce)")
+    bundle, environment = _make_scenario(args.bot_type, seed)
+    config = HybridConfig(spacing=1, angular_spacing=math.pi / 3, max_iterations=25000, fine_collision=False)
 
     Simulator(bundle, environment, config).run(args.manual, args.record)
 
