@@ -18,9 +18,6 @@ METERS_TO_PIXELS    = min(
     VIRTUAL_SIZE[1] // (NUM_ROWS * CELLS_TO_METERS),
 )
 
-# ── Obstacle generation ──────────────────────────────────────────────────
-OBSTACLE_COVERAGE = 0.10  # 10% of cells filled with tetrominoes
-
 # ── Simulation ───────────────────────────────────────────────────────────
 FPS = 30
 DT  = 1 / FPS                                       # physics timestep (seconds)

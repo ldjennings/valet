@@ -225,12 +225,6 @@ class TrailerState:
 S = TypeVar("S", PointState, DiffState, CarState, TrailerState)
 
 
-# # Type var used to specify only "poseable states", ie ones that have a heading
-# # Point bots arent really needed for the assignment, but I'm keeping them in because I can
-# SP = TypeVar("SP", DiffState, CarState, TrailerState)
-
-
-
 def trajectory_length(traj: list[S], ang_weight: float) -> float:
     if len(traj) == 0:
         return 0.0

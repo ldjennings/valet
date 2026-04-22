@@ -73,11 +73,6 @@ def point_geom(base: BaseGeometry, state: PointState) -> BaseGeometry:
     return translate(base, xoff=x, yoff=y)
 
 
-# def cached_geom(cache: list[BaseGeometry], x: float, y: float, heading_rad: float) -> BaseGeometry:
-#     """Look up the nearest pre-rotated shape and translate to (x, y)."""
-#     return translate(lookup_cached(cache, heading_rad), xoff=x, yoff=y)
-
-
 @dataclass(frozen=True, slots=True)
 class LineFootprint:
     """A hitch-bar segment stored as raw endpoints for pure-math grid traversal (no Shapely)."""

@@ -66,7 +66,7 @@ def populate_grid(grid_shape: tuple[int, int], probability: float, seed: int | N
 
         for dr, dc in shape:
             r, c = row + dr, col + dc
-            if r < num_rows and c < num_cols and r >= 0 and c >= 0:
+            if 0 <= r < num_rows and 0 <= c < num_cols:
                 grid[r, c] = 1
 
     return grid

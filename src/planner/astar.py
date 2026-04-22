@@ -46,10 +46,10 @@ ROTATION_COST_WEIGHT = 0.5  # cost per radian of heading change; keeps rotate-in
 def _is_reverse(traj: list[Rotateable]) -> bool:
     """True if the primitive moves opposite to the starting heading (reverse gear)."""
     start = traj[0]
-    next = traj[1]
+    subsequent = traj[1]
 
-    x1, y1, h1 = start.pose()
-    x2, y2, _ = next.pose()
+    x1, y1, h1  = start.pose()
+    x2, y2, _   = subsequent.pose()
 
     p1 = Position((x1,y1))
     p2 = Position((x2, y2))

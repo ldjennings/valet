@@ -33,27 +33,20 @@ import config as cfg
 STANDARD_SPEED = 5.0
 
 
-def _n_steps_for_control(spacing: float, v: float, omega: float, dt: float) -> int:
+def _n_steps_for_control(spacing: float, angular_spacing: float, v: float, omega: float, dt: float) -> int:
     """
     Compute how many simulation steps a (v, omega) control pair needs so that
-    the XY displacement is at least `spacing`.
-
-    Straight (omega≈0): displacement = |v| * n * dt → n = spacing / (|v| * dt)
-    Arc (omega≠0):      radius R = |v/omega|, displacement after angle θ = n*|omega|*dt
-                         is R * sqrt(2 - 2cos(θ)).  Solve for θ then n.
+    the XY displacement is at least `spacing` or their heading displacement is
+    at least 'angular_spacing'.
     """
-    if abs(omega) < 1e-9:
-        return steps_to_cover(spacing, abs(v) * dt)
+    n_xy = steps_to_cover(spacing, abs(v) * dt)
 
-    R = abs(v / omega)
-    # R * sqrt(2 - 2cos(θ)) = spacing → cos(θ) = 1 - spacing² / (2R²)
-    cos_theta = 1.0 - (spacing ** 2) / (2.0 * R ** 2)
-    if cos_theta < -1.0:
-        # spacing > 2R (diameter), need a half-turn
-        theta = math.pi
-    else:
-        theta = math.acos(cos_theta)
-    return steps_to_cover(theta, abs(omega) * dt) + 3
+    if abs(omega) < 1e-9: # just a straight primitive
+        return n_xy
+
+    n_heading = steps_to_cover(angular_spacing, abs(omega) * dt)
+
+    return max(n_xy, n_heading)
 
 
 class Bot(Protocol[S]):
@@ -73,7 +66,7 @@ class Bot(Protocol[S]):
 
     def footprint(self, state: S, approximate: bool = False) -> list[FootprintEntry]:
         """Returns the robot's collision geometries as (x_offset, y_offset, geometry) tuples.
-        Translating shapely geometry is suprisingly expensive, for now the following applies as an optimization:
+        Translating shapely geometry is surprisingly expensive, for now the following applies as an optimization:
         If approximate=True, geometry is pre-rotated but NOT translated — offset is (x, y).
         If approximate=False, geometry is fully placed — offset is (0, 0)."""
         ...
@@ -314,14 +307,8 @@ class DiffBot(BotBase):
             for omega in omegas: # each subdivision of the max angular velocity
 
                 # figure out how many steps you need to get to a new xy bin
-                n_xy = _n_steps_for_control(spacing, v, omega, cfg.DT)
+                n_steps = _n_steps_for_control(spacing, angular_spacing, v, omega, cfg.DT)
 
-                # for turning primitives, ensure heading changes by at least one angular bin
-                if abs(omega) > 1e-9:
-                    n_heading = steps_to_cover(angular_spacing, abs(omega) * cfg.DT)
-                    n_steps = max(n_xy, n_heading)
-                else:
-                    n_steps = n_xy
                 arr = arc_trajectory(x0, y0, h0, v, omega, n_steps, cfg.DT)
                 traj = [DiffState(row[0], row[1], row[2]) for row in arr]
                 trajectories.append((traj, abs(v) * n_steps * cfg.DT))
@@ -401,12 +388,9 @@ class CarBot(BotBase):
         for v in (self.SPEED, -self.SPEED):
             for delta in deltas:
                 omega = v * math.tan(delta) / self.wheelbase if delta != 0 else 0.0
-                n_xy = _n_steps_for_control(spacing, v, omega, cfg.DT)
-                if abs(omega) > 1e-9:
-                    n_heading = steps_to_cover(angular_spacing, abs(omega) * cfg.DT)
-                    n_steps = max(n_xy, n_heading)
-                else:
-                    n_steps = n_xy
+
+                n_steps = _n_steps_for_control(spacing, angular_spacing, v, omega, cfg.DT)
+
                 arr = arc_trajectory(x0, y0, h0, v, omega, n_steps, cfg.DT)
 
                 traj = [CarState(row[0], row[1], row[2]) for row in arr]
@@ -514,12 +498,16 @@ class TrailerBot(BotBase):
         for v in (self.SPEED, -self.SPEED):
             for delta in deltas:
                 omega = v * math.tan(delta) / self.wheelbase if delta != 0 else 0.0
-                n_xy = _n_steps_for_control(spacing, v, omega, cfg.DT) +1 # trailer needs an extra little push here
-                if abs(omega) > 1e-9:
-                    n_heading = steps_to_cover(angular_spacing, abs(omega) * cfg.DT)
-                    n_steps = max(n_xy, n_heading)
-                else:
-                    n_steps = n_xy
+
+                # the trailer runs into an issue where it is unable to generate straight primitives
+                # without the + 1 here. To observe, comment it out and try to find a obstacle field
+                # that doesn't allow the initial pose to generate any turning primitives. It will be
+                # unable to find any path out. As of writing this comment, a seed of 27 should be good.
+
+                # This is likely due to some weird floating point error, I did not consider it worth
+                # debugging instead of just leaving it.
+                n_steps = _n_steps_for_control(spacing,angular_spacing, v, omega, cfg.DT) + 1
+
 
                 # truck trajectory is a circular arc — compute all states at once
                 arr = arc_trajectory(x0, y0, h0, v, omega, n_steps, cfg.DT)
