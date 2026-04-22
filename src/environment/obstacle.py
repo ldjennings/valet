@@ -28,7 +28,8 @@ class ObstacleEnvironment:
     """
 
     def __init__(
-        self, grid_shape: tuple[int, int], cell_size_meters: float, proportion_filled: float, trailer: bool
+        self, grid_shape: tuple[int, int], cell_size_meters: float, proportion_filled: float, trailer: bool,
+        seed: int | None = None,
     ) -> None:
         """
         Args:
@@ -36,8 +37,9 @@ class ObstacleEnvironment:
             cell_size_meters: Side length of one grid cell in meters.
             proportion_filled: Target fraction of cells to fill with obstacles, in [0, 1].
             trailer: If True, uses wider start clearance and trailer-sized parking spot.
+            seed: Optional RNG seed for reproducible obstacle layouts.
         """
-        self.grid: np.ndarray = populate_grid(grid_shape, proportion_filled).astype(np.bool_)
+        self.grid: np.ndarray = populate_grid(grid_shape, proportion_filled, seed).astype(np.bool_)
         self.cell_size = cell_size_meters
 
         clear_start_goal(self.grid, trailer)

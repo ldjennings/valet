@@ -36,6 +36,12 @@ def parse_args() -> argparse.Namespace:
         default="diff",
         help="Type of bot to simulate",
     )
+    parser.add_argument(
+        "-s", "--seed",
+        type=int,
+        default=None,
+        help="RNG seed for reproducible obstacle layouts.",
+    )
     return parser.parse_args()
 
 
@@ -56,7 +62,7 @@ def main() -> None:
     goalxy  = grid_to_coords(cfg.NUM_COLS + gr, cfg.NUM_ROWS + gc)
 
     bundle      = make_bot(args.bot_type, startxy, goalxy)
-    environment = ObstacleEnvironment((cfg.NUM_ROWS, cfg.NUM_COLS), cfg.CELLS_TO_METERS, 0.1, trailer)
+    environment = ObstacleEnvironment((cfg.NUM_ROWS, cfg.NUM_COLS), cfg.CELLS_TO_METERS, 0.1, trailer, seed=args.seed)
     config      = HybridConfig(spacing=1, angular_spacing=math.pi / 3, max_iterations=15000, fine_collision=False)
 
     Simulator(bundle, environment, config).run(args.manual, args.record)

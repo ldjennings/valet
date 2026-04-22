@@ -32,7 +32,7 @@ def rotate(shape, k):
     return rotated
 
 
-def populate_grid(grid_shape: tuple[int, int], probability: float) -> np.ndarray:
+def populate_grid(grid_shape: tuple[int, int], probability: float, seed: int | None = None) -> np.ndarray:
     """
     Generate a random obstacle grid using tetromino-shaped obstacles.
 
@@ -42,10 +42,12 @@ def populate_grid(grid_shape: tuple[int, int], probability: float) -> np.ndarray
     Args:
         grid_shape: (num_rows, num_cols) of the grid.
         probability: Target fraction of cells to fill, in [0, 1].
+        seed: Optional RNG seed for reproducibility.
     """
 
     assert 0 <= probability <= 1.0, "probability not valid, must be in [0, 1]"
-    
+
+    rng = np.random.default_rng(seed)
     num_rows, num_cols = grid_shape
 
     grid = np.zeros((num_rows, num_cols), dtype=int)
@@ -53,14 +55,14 @@ def populate_grid(grid_shape: tuple[int, int], probability: float) -> np.ndarray
     num_cells_expected = int(num_rows * num_cols * probability)
 
     while grid.sum() < num_cells_expected:
-        tet_type = random.randint(0, len(tetrominoes) - 1)
+        tet_type = rng.integers(0, len(tetrominoes) - 1, endpoint=True)
 
         shape = tetrominoes[tet_type]
 
-        shape = rotate(shape, random.randint(0, 3))
+        shape = rotate(shape, rng.integers(0, 3, endpoint=True))
 
-        row = random.randint(0, num_rows - 1)
-        col = random.randint(0, num_cols - 1)
+        row = rng.integers(0, num_rows - 1, endpoint=True)
+        col = rng.integers(0, num_cols - 1, endpoint=True)
 
         for dr, dc in shape:
             r, c = row + dr, col + dc
