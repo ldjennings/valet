@@ -8,7 +8,7 @@ from shapely.geometry.base import BaseGeometry
 
 from typing import Final, TypeAlias
 
-FootprintEntry: TypeAlias = tuple[float, float, BaseGeometry]
+FootprintEntry: TypeAlias = tuple[float, float, BaseGeometry, tuple[float, float, float, float]]
 
 
 def intersects_any(tree: STRtree, geom: BaseGeometry) -> bool:
@@ -147,8 +147,7 @@ class ObstacleEnvironment:
 
     def is_valid_state(self, bot_geoms: list[FootprintEntry]) -> bool:
         """Return True if none of the geometries intersect any obstacle and all lie within the boundary."""
-        for ox, oy, g in bot_geoms:
-            minx, miny, maxx, maxy = g.bounds
+        for ox, oy, g, (minx, miny, maxx, maxy) in bot_geoms:
             bounds = (minx + ox, miny + oy, maxx + ox, maxy + oy)
 
             if not self._within_bounds(bounds):

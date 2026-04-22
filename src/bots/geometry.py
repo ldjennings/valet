@@ -15,6 +15,7 @@ import math
 from shapely.affinity import rotate, translate
 from shapely.geometry import box, Point, LineString
 from shapely.geometry.base import BaseGeometry
+from typing import TypeAlias
 
 
 # ── base shape constructors (call once, cache the result) ────────────────
@@ -41,16 +42,19 @@ def make_axle_rect_base(wheelbase: float, length: float, width: float) -> BaseGe
 
 HEADING_CACHE_SIZE = 72  # one slot per 5°; good enough for collision checking
 
-def build_heading_cache(base: BaseGeometry) -> list[BaseGeometry]:
-    """Pre-rotate base shape at HEADING_CACHE_SIZE evenly-spaced headings."""
-    return [
-        rotate(base, math.degrees(i * 2 * math.pi / HEADING_CACHE_SIZE), origin=(0, 0))
-        for i in range(HEADING_CACHE_SIZE)
-    ]
+CachedShape: TypeAlias = tuple[BaseGeometry, tuple[float, float, float, float]]
+
+def build_heading_cache(base: BaseGeometry) -> list[CachedShape]:
+    """Pre-rotate base shape at HEADING_CACHE_SIZE evenly-spaced headings, storing bounds alongside."""
+    result = []
+    for i in range(HEADING_CACHE_SIZE):
+        geom = rotate(base, math.degrees(i * 2 * math.pi / HEADING_CACHE_SIZE), origin=(0, 0))
+        result.append((geom, geom.bounds))
+    return result
 
 
-def lookup_cached(cache: list[BaseGeometry], heading_rad: float) -> BaseGeometry:
-    """Find the closest pre-rotated shape for a given heading."""
+def lookup_cached(cache: list[CachedShape], heading_rad: float) -> CachedShape:
+    """Find the closest pre-rotated (geom, bounds) pair for a given heading."""
     idx = round(heading_rad % (2 * math.pi) / (2 * math.pi) * HEADING_CACHE_SIZE) % HEADING_CACHE_SIZE
     return cache[idx]
 
@@ -68,50 +72,60 @@ def point_geom(base: BaseGeometry, state: PointState) -> BaseGeometry:
     return translate(base, xoff=x, yoff=y)
 
 
-def cached_geom(cache: list[BaseGeometry], x: float, y: float, heading_rad: float) -> BaseGeometry:
-    """Look up the nearest pre-rotated shape and translate to (x, y)."""
-    return translate(lookup_cached(cache, heading_rad), xoff=x, yoff=y)
+# def cached_geom(cache: list[BaseGeometry], x: float, y: float, heading_rad: float) -> BaseGeometry:
+#     """Look up the nearest pre-rotated shape and translate to (x, y)."""
+#     return translate(lookup_cached(cache, heading_rad), xoff=x, yoff=y)
 
+
+FootprintEntry: TypeAlias = tuple[float, float, BaseGeometry, tuple[float, float, float, float]]
 
 def truck_trailer_geom(
     state: TrailerState,
     truck_base: BaseGeometry,
     trailer_base: BaseGeometry,
     hitch_distance: float,
-
-) -> list[tuple[float, float, BaseGeometry]]:
+) -> list[FootprintEntry]:
     """
-    Returns [connection, truck, trailer] as separate geometries.
-
-    hitch_distance: distance from hitch point (rear axle) to trailer axle center.
-    If approximate=True, uses pre-rotated caches instead of exact rotation.
+    Returns [connection, truck, trailer] as fully-placed geometries with pre-computed bounds.
+    Used for exact (non-approximate) collision checking and rendering.
     """
     x, y, truck_heading = state.pose()
     trailer_heading = state.trailer_heading_rad
 
-    truck = place(truck_base, x, y, truck_heading)
-
     x_t = x - hitch_distance * math.cos(trailer_heading)
     y_t = y - hitch_distance * math.sin(trailer_heading)
 
-    trailer = place(trailer_base, x_t, y_t, trailer_heading)
-
     connection = LineString([(x, y), (x_t, y_t)])
+    truck      = place(truck_base, x, y, truck_heading)
+    trailer    = place(trailer_base, x_t, y_t, trailer_heading)
 
-    return [(0, 0, connection), (0, 0, truck), (0, 0, trailer)]
+    return [
+        (0, 0, connection, connection.bounds),
+        (0, 0, truck,      truck.bounds),
+        (0, 0, trailer,    trailer.bounds),
+    ]
+
 
 def truck_trailer_approximate(
     state: TrailerState, hitch_distance: float,
-    truck_cache: list[BaseGeometry],
-    trailer_cache: list[BaseGeometry],
-) -> list[tuple[float, float, BaseGeometry]]:
+    truck_cache: list[CachedShape],
+    trailer_cache: list[CachedShape],
+) -> list[FootprintEntry]:
+    """
+    Returns [connection, truck, trailer] using pre-rotated cached shapes (offset not yet applied).
+    Bounds are pre-computed — no Shapely property access at check time.
+    """
     x, y, truck_h, trailer_h = state
 
     x_t = x - hitch_distance * math.cos(trailer_h)
     y_t = y - hitch_distance * math.sin(trailer_h)
+
     connection = LineString([(x, y), (x_t, y_t)])
+    truck_geom,   truck_bounds   = lookup_cached(truck_cache,   truck_h)
+    trailer_geom, trailer_bounds = lookup_cached(trailer_cache, trailer_h)
 
-
-    truck   = lookup_cached(truck_cache, truck_h)
-    trailer = lookup_cached(trailer_cache, trailer_h)
-    return [(0, 0, connection), (x, y, truck), (x_t, y_t, trailer)]
+    return [
+        (0,   0,   connection,  connection.bounds),
+        (x,   y,   truck_geom,  truck_bounds),
+        (x_t, y_t, trailer_geom, trailer_bounds),
+    ]

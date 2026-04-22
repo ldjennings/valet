@@ -30,9 +30,9 @@ from shapely.geometry.base import BaseGeometry
 import pygame
 import config as cfg
 
-# (x_offset, y_offset, geometry) — offset is applied to bounds for cheap AABB checks;
-# geometry is only translated for the rare STRtree check.
-FootprintEntry: TypeAlias = tuple[float, float, BaseGeometry]
+# (x_offset, y_offset, geometry, pre_computed_bounds) — offset shifts bounds at check time;
+# geometry is only translated for the rare STRtree narrow-phase check.
+FootprintEntry: TypeAlias = tuple[float, float, BaseGeometry, tuple[float, float, float, float]]
 
 
 
@@ -199,12 +199,14 @@ class PointBot(BotBase):
     def __init__(self, goal_radius_tol: float = cfg.GOAL_RADIUS_TOLERANCE):
         self.goal_radius_tol = goal_radius_tol
         self._base = make_point_base()
+        self._base_bounds = self._base.bounds
 
     def footprint(self, state: PointState, approximate: bool = False) -> list[FootprintEntry]:
         x, y = state.position()
         if approximate:
-            return [(x, y, self._base)]
-        return [(0, 0, point_geom(self._base, state))]
+            return [(x, y, self._base, self._base_bounds)]
+        g = point_geom(self._base, state)
+        return [(0, 0, g, g.bounds)]
 
     def generate_trajectory(
         self, start: PointState, goal: PointState, resolution: float = 0.1
@@ -272,8 +274,10 @@ class DiffBot(BotBase):
     def footprint(self, state: DiffState, approximate: bool = False) -> list[FootprintEntry]:
         x, y, h = state.center_x, state.center_y, state.heading_rad
         if approximate:
-            return [(x, y, lookup_cached(self._cache, h))]
-        return [(0, 0, place(self._base, x, y, h))]
+            geom, bounds = lookup_cached(self._cache, h)
+            return [(x, y, geom, bounds)]
+        g = place(self._base, x, y, h)
+        return [(0, 0, g, g.bounds)]
 
     def generate_trajectory(
         self, start: DiffState, goal: DiffState, resolution: float = 0.1
@@ -379,8 +383,10 @@ class CarBot(BotBase):
     def footprint(self, state: CarState, approximate: bool = False) -> list[FootprintEntry]:
         x, y, h = state.rear_axle_x, state.rear_axle_y, state.heading_rad
         if approximate:
-            return [(x, y, lookup_cached(self._cache, h))]
-        return [(0, 0, place(self._base, x, y, h))]
+            geom, bounds = lookup_cached(self._cache, h)
+            return [(x, y, geom, bounds)]
+        g = place(self._base, x, y, h)
+        return [(0, 0, g, g.bounds)]
 
     def generate_trajectory(self, start: CarState, goal: CarState, resolution: float = 0.1) -> list[CarState] | None:
         raw = rs_path_sample(start.pose(), goal.pose(), self.turning_radius, resolution)
