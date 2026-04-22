@@ -75,6 +75,49 @@ def linspace_xy(p1: Position, p2: Position, resolution: float
     return [Position((x, y)) for x, y in ps]
 
 
+def arc_trajectory(x0: float, y0: float, h0: float,
+                   v: float, omega: float,
+                   n_steps: int, dt: float) -> np.ndarray:
+    """
+    Compute a constant-curvature arc trajectory analytically.
+
+    Returns an array of shape (n_steps+1, 3) where each row is [x, y, heading].
+    Row 0 is the starting pose; rows 1..n are the states after each timestep.
+
+    For omega ~= 0 (straight line):
+        x(i) = x0 + v * cos(h0) * i * dt
+        y(i) = y0 + v * sin(h0) * i * dt
+        h(i) = h0
+
+    For omega != 0 (circular arc with signed radius R = v/omega):
+        h(i) = h0 + omega·i·dt
+        x(i) = x0 + R·(sin(h(i)) - sin(h0))
+        y(i) = y0 - R·(cos(h(i)) - cos(h0))
+
+    The omega != 0 formula is accounted for, so function covers
+    straight trajectories, in addition to the arc, and in-place rotation primitives.
+    """
+    arr = np.empty((n_steps + 1, 3))
+    arr[0, 0] = x0
+    arr[0, 1] = y0
+    arr[0, 2] = h0
+
+    ts = np.arange(1, n_steps + 1, dtype=np.float64) * dt
+
+    if abs(omega) < 1e-9:
+        arr[1:, 0] = x0 + v * math.cos(h0) * ts
+        arr[1:, 1] = y0 + v * math.sin(h0) * ts
+        arr[1:, 2] = h0
+    else:
+        hs = h0 + omega * ts
+        R  = v / omega
+        arr[1:, 0] = x0 + R * (np.sin(hs) - math.sin(h0))
+        arr[1:, 1] = y0 - R * (np.cos(hs) - math.cos(h0))
+        arr[1:, 2] = hs
+
+    return arr
+
+
 def rs_path_length(start, goal, turning_radius: float) -> float:
     """Reeds-Shepp path length between two states (ignoring obstacles)."""
     x0, y0, h0, *_ = start

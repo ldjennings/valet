@@ -17,7 +17,7 @@ from bots.state import (
     CarState,
     TrailerState,
 )
-from utils import angle_difference, direction, center_distance, angle_distance, linspace_xy, rs_path_sample, steps_to_cover, Position
+from utils import angle_difference, direction, center_distance, angle_distance, linspace_xy, rs_path_sample, steps_to_cover, arc_trajectory, Position
 from bots.geometry import (
     point_geom, place, truck_trailer_approximate, truck_trailer_geom,
     make_point_base, make_centered_rect_base, make_axle_rect_base,
@@ -28,12 +28,6 @@ import math
 from typing import Protocol
 import pygame
 import config as cfg
-
-# (x_offset, y_offset, geometry, pre_computed_bounds) — offset shifts bounds at check time;
-# geometry is only translated for the rare STRtree narrow-phase check.
-# FootprintEntry: TypeAlias = tuple[float, float, BaseGeometry, tuple[float, float, float, float]]
-
-
 
 
 STANDARD_SPEED = 5.0
@@ -314,26 +308,30 @@ class DiffBot(BotBase):
             self.OMEGA_MAX * i / steering_granularity
             for i in range(-steering_granularity, steering_granularity + 1)
         ]
+        x0, y0, h0 = state.center_x, state.center_y, state.heading_rad
         trajectories = []
-        for v in (self.SPEED, -self.SPEED):
-            for omega in omegas:
+        for v in (self.SPEED, -self.SPEED): # forward and reverse sets
+            for omega in omegas: # each subdivision of the max angular velocity
+
+                # figure out how many steps you need to get to a new xy bin
                 n_xy = _n_steps_for_control(spacing, v, omega, cfg.DT)
+
                 # for turning primitives, ensure heading changes by at least one angular bin
                 if abs(omega) > 1e-9:
                     n_heading = steps_to_cover(angular_spacing, abs(omega) * cfg.DT)
                     n_steps = max(n_xy, n_heading)
                 else:
                     n_steps = n_xy
-                traj: list[DiffState] = [state]
-                for _ in range(n_steps):
-                    traj.append(traj[-1].step(v, omega, cfg.DT))
+                arr = arc_trajectory(x0, y0, h0, v, omega, n_steps, cfg.DT)
+                traj = [DiffState(row[0], row[1], row[2]) for row in arr]
                 trajectories.append((traj, abs(v) * n_steps * cfg.DT))
-        # rotate in place: no translation, arc_length = 0
+
+
+        # rotate in place: v=0, so arc_length = 0; arc_trajectory handles this correctly (R=0)
         n_rot = steps_to_cover(angular_spacing, self.OMEGA_MAX * cfg.DT)
         for omega in (-self.OMEGA_MAX, self.OMEGA_MAX):
-            traj = [state]
-            for _ in range(n_rot):
-                traj.append(traj[-1].step(0.0, omega, cfg.DT))
+            arr = arc_trajectory(x0, y0, h0, 0.0, omega, n_rot, cfg.DT)
+            traj = [DiffState(row[0], row[1], row[2]) for row in arr]
             trajectories.append((traj, 0.0))
         return trajectories
 
@@ -392,10 +390,13 @@ class CarBot(BotBase):
         return path
 
     def propagate(self, state: CarState, spacing: float, angular_spacing: float, steering_granularity: int) -> list[tuple[list[CarState], float]]:
+        # figure out what angular velocities we are testing
         deltas = [
             self.MAX_STEER * i / steering_granularity
             for i in range(-steering_granularity, steering_granularity + 1)
         ]
+        # starting point
+        x0, y0, h0 = state.pose()
         trajectories = []
         for v in (self.SPEED, -self.SPEED):
             for delta in deltas:
@@ -406,9 +407,10 @@ class CarBot(BotBase):
                     n_steps = max(n_xy, n_heading)
                 else:
                     n_steps = n_xy
-                traj: list[CarState] = [state]
-                for _ in range(n_steps):
-                    traj.append(traj[-1].step(v, delta, self.wheelbase, cfg.DT))
+                arr = arc_trajectory(x0, y0, h0, v, omega, n_steps, cfg.DT)
+
+                traj = [CarState(row[0], row[1], row[2]) for row in arr]
+
                 trajectories.append((traj, abs(v) * n_steps * cfg.DT))
         return trajectories
 
@@ -506,26 +508,36 @@ class TrailerBot(BotBase):
             self.MAX_STEER * i / steering_granularity
             for i in range(-steering_granularity, steering_granularity + 1)
         ]
+        x0, y0, h0 = state.rear_axle_x, state.rear_axle_y, state.heading_rad
+        phi0 = state.trailer_heading_rad
         trajectories = []
         for v in (self.SPEED, -self.SPEED):
             for delta in deltas:
                 omega = v * math.tan(delta) / self.wheelbase if delta != 0 else 0.0
-                n_xy = _n_steps_for_control(spacing, v, omega, cfg.DT)
+                n_xy = _n_steps_for_control(spacing, v, omega, cfg.DT) +1 # trailer needs an extra little push here
                 if abs(omega) > 1e-9:
                     n_heading = steps_to_cover(angular_spacing, abs(omega) * cfg.DT)
                     n_steps = max(n_xy, n_heading)
                 else:
                     n_steps = n_xy
 
-                traj: list[TrailerState] = [state]
+                # truck trajectory is a circular arc — compute all states at once
+                arr = arc_trajectory(x0, y0, h0, v, omega, n_steps, cfg.DT)
 
+                # trailer heading (phi) is coupled to the truck via a nonlinear ODE and
+                # must be integrated sequentially; only the scalar phi is tracked here,
+                # not a full state object, so this loop is as cheap as possible
+                traj: list[TrailerState] = [state]
+                phi = phi0
                 jackknifed = False
-                for _ in range(n_steps):
-                    next_state = traj[-1].step(v, delta, self.wheelbase, self.hitch_distance, cfg.DT)
-                    if angle_distance(next_state.heading_rad, next_state.trailer_heading_rad) > self.JACKKNIFE_LIMIT:
+                for i in range(1, n_steps + 1):
+                    phi += (v / self.hitch_distance) * math.sin(arr[i, 2] - phi) * cfg.DT
+
+                    if angle_distance(arr[i, 2], phi) > self.JACKKNIFE_LIMIT:
                         jackknifed = True
                         break
-                    traj.append(next_state)
+
+                    traj.append(TrailerState(arr[i, 0], arr[i, 1], arr[i, 2], phi))
 
                 if not jackknifed:
                     trajectories.append((traj, abs(v) * n_steps * cfg.DT))
