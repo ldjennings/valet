@@ -10,10 +10,10 @@ from dataclasses import dataclass
 from typing import Generic
 
 import config as cfg
-from Bots import S
+from bots import S
 from environment import ObstacleEnvironment
-from Planner import hybrid_astar, HybridConfig
-from simulator.render import Renderer
+from planner import hybrid_astar, HybridConfig
+from simulator.renderer import Renderer
 from simulator.recorder import MP4Recorder, NoOpRecorder
 from simulator.Bundle import BotBundle
 

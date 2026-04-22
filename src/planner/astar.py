@@ -1,14 +1,86 @@
-from environment.obstacle import ObstacleEnvironment
-from Bots import S, Bot
-from Planner.Primitive import propagated_primitives
-from Planner.postprocessing import smooth_path, resample_path
-from Planner.AstarConfig import HybridConfig
-import heapq
 from dataclasses import dataclass, field
-from typing import Generic
-from typing import TypeAlias
-
 import math
+from typing import Generic, cast, TypeAlias
+import heapq
+
+from bots import S, Bot, trajectory_length
+from bots.state import Rotateable
+from utils import Position, angle_distance, center_distance, direction
+from environment.obstacle import ObstacleEnvironment
+from planner.postprocessing import smooth_path, resample_path
+
+
+@dataclass
+class HybridConfig():
+    """Hybrid A* parameter configuration."""
+    spacing:                float           = .5
+    angular_spacing:        float           = math.pi / 6   # heading bins (6 instead of 8)
+    trailer_spacing:        float | None    = None          # if None, falls back to angular_spacing
+    steering_granularity:   int             = 2             # number of steering angles between 0 and max on each side
+    reverse_cost:           float           = 0.2           # override: penalise reversals in hybrid search
+    max_iterations:         int | None      = 7500          # cap on node expansions; None = unlimited
+    fine_collision:         bool            = True          # False = only center-point + coarse checks (faster, less accurate)
+
+
+@dataclass(frozen=True)
+class Primitive(Generic[S]):
+    trajectory: list[S]
+    cost: float
+
+    @property
+    def start(self) -> S:
+        return self.trajectory[0]
+
+    @property
+    def endpoint(self) -> S:
+        return self.trajectory[-1]
+
+
+    def __lt__(self, other: "Primitive") -> bool:
+        return self.cost < other.cost
+
+
+ROTATION_COST_WEIGHT = 0.5  # cost per radian of heading change; keeps rotate-in-place nonzero
+
+
+def _is_reverse(traj: list[Rotateable]) -> bool:
+    """True if the primitive moves opposite to the starting heading (reverse gear)."""
+    start = traj[0]
+    next = traj[1]
+
+    x1, y1, h1 = start.pose()
+    x2, y2, _ = next.pose()
+
+    p1 = Position((x1,y1))
+    p2 = Position((x2, y2))
+
+    if center_distance(p1, p2) < 1e-6:
+        return False  # pure rotation, not reverse
+
+
+    # check to see if the angle between the current heading and the direction of the next state is
+    # greater than 90 degrees
+    return angle_distance(direction(p1, p2), h1) > math.pi / 2
+
+
+def propagated_primitives(bot: Bot, state: S, config: HybridConfig, steering_granularity: int = 3) -> list[Primitive]:
+    """
+    Call bot.propagate() and wrap each trajectory into a Primitive with arc-length cost.
+    Each bot internally computes per-control n_steps so every primitive displaces
+    at least `config.spacing` in XY and turns at least `config.angular_spacing` in heading.
+    """
+    primitives = []
+    for traj in bot.propagate(state, config.spacing, config.angular_spacing, steering_granularity):
+
+        cost = trajectory_length(traj, ROTATION_COST_WEIGHT)
+        if  isinstance(traj[0], Rotateable):
+            posed = cast(list[Rotateable], traj)
+            if _is_reverse(posed):
+                cost += config.reverse_cost
+
+        primitives.append(Primitive(traj, cost))
+    return primitives
+
 
 NodeKey: TypeAlias = tuple[int, ...]
 

@@ -5,8 +5,8 @@ Provides a single container that is passed through the planner and simulator,
 keeping the bot and its states co-located and type-consistent.
 """
 
-from Bots.Bots import Bot, PointBot, DiffBot, CarBot, TrailerBot
-from Bots.BotState import S, PointState, DiffState, CarState, TrailerState
+from bots.bots import Bot, PointBot, DiffBot, CarBot, TrailerBot
+from bots.state import S, PointState, DiffState, CarState, TrailerState
 from typing import Generic
 from dataclasses import dataclass
 

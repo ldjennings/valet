@@ -8,8 +8,8 @@ resample_path: uniform arc-length resampling for constant-velocity playback.
 import math
 import random
 
-from Bots import S, Bot, TrailerBot, trajectory_length
-from Bots.BotState import PointTurnCapable
+from bots import S, Bot, TrailerBot, trajectory_length
+from bots.state import PointTurnCapable
 from utils import center_distance
 from environment.obstacle import ObstacleEnvironment
 

@@ -5,7 +5,7 @@ import config as cfg
 from simulator import make_bot
 from simulator.simulator import Simulator
 from environment import ObstacleEnvironment
-from Planner import HybridConfig
+from planner import HybridConfig
 
 
 def grid_to_coords(x_cell: float, y_cell: float, center: bool = True) -> tuple[float, float]:

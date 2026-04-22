@@ -9,7 +9,7 @@ Base shapes (rectangles, circles) are built once via make_*_base() and cached
 by the bot instance. Per-state footprint calls only rotate + translate.
 """
 
-from Bots.BotState import PointState, TrailerState
+from bots.state import PointState, TrailerState
 
 import math
 from shapely.affinity import rotate, translate

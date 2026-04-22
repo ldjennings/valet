@@ -10,7 +10,7 @@ Robot dimensions and goal tolerances are constructor parameters with sensible
 defaults, so the Bots package has no dependency on simulator.config.
 """
 
-from Bots.BotState import (
+from bots.state import (
     S,
     PointState,
     DiffState,
@@ -18,7 +18,7 @@ from Bots.BotState import (
     TrailerState,
 )
 from utils import angle_difference, direction, center_distance, angle_distance, linspace_xy, rs_path_sample, steps_to_cover, Position
-from Bots.geometry_helpers import (
+from bots.geometry import (
     point_geom, place, truck_trailer_approximate, truck_trailer_geom,
     make_point_base, make_centered_rect_base, make_axle_rect_base,
     build_heading_cache, lookup_cached,
