@@ -11,6 +11,9 @@ import numpy.random as nprandom
 
 
 
+# ── Tetromino shapes ─────────────────────────────────────────────────────────
+
+# Each entry is a list of (row, col) offsets relative to an anchor cell.
 tetrominoes = {
     0: [(0, 0), (1, 0), (0, 1), (1, 1)],  # square
     1: [(0, 0), (1, 0), (2, 0), (1, 1)],  # T-shape
@@ -21,6 +24,8 @@ tetrominoes = {
     6: [(1, 0), (1, 1), (0, 1), (0, 2)],  # other squiggly
 }
 
+
+# ── Grid generation ───────────────────────────────────────────────────────────
 
 def rotate(shape, k):
     """Rotate shape by 90 degrees k times."""
@@ -71,6 +76,8 @@ def populate_grid(grid_shape: tuple[int, int], probability: float, seed: int | N
 
     return grid
 
+
+# ── Start / goal layout ───────────────────────────────────────────────────────
 
 regular_parking_spot = np.array([
     [0, 0, 0, 0, 0, 0],

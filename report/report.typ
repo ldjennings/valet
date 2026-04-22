@@ -1,4 +1,13 @@
 #show link: underline
+
+#let code-block(body) = rect(
+  fill: luma(245), // light grey background
+  stroke: 0.5pt + luma(200), // subtle border
+  radius: 4pt, // rounded corners
+  inset: 8pt, // padding inside the box
+  body,
+)
+
 = Valet Homework Assignment
 == RBE 550 - Liam Jennings
 
@@ -23,42 +32,64 @@ The hero uses A\* with a Manhattan distance heuristic to decide its next move, w
 
 
 
- === Collision Detection
+=== Collision Detection
+// Demonstrate your collision checker implementation with annotated diagrams depicting overlap
+// checks with a vehicle and obstacle region. Submit these diagrams individually, but also include
+// them in your report.
 
 For collision detection, I initially chose to use #link("https://shapely.readthedocs.io/en/stable/")[shapely], a third-party python library used to model and manipulate geometry. The main reason for doing so was to develop the rest of the program without needing to take the time to figure out all the details of collision detection.
 
-However, this approach soon ran into performance issues. While shapely is fairly performant by default, it also has to deal with much more overhead due to being a fully featured geometry library. It encompasses concepts like [TODO], while this assignment mostly deals with collisions between boxes, most of them on an axis aligned regular grid. When the collision detector/state validation function can run tens, even hundreds of thousands of times at times, that overhead quickly adds up.
+However, this approach soon ran into performance issues. Shapely is designed to be performant, but much of that performance lies in batching calls to the underlying C/C++ library. My approach, calling intersection on individual geometries, suffered from the overhead involved in repeatedly crossing that barrier.
+
+
+// Additionally, shapely's features
+
+//  overhead due to being a fully featured geometry library. It's designed to deal with general topology geometry analysis, while this assignment is limited to collisions between rectangles, either axis aligned or oriented.
+
+// Shapely is designed around being a python interface for the #link("https://libgeos.org/")[C/C++ GEOS library]
 
 To deal with this, I focused on three different approaches: caching approximate rotations of each geometry, reducing the number of states that need to be checked, and eliminating states that can be easily validated.
 
 ==== State validator
-```py
-    def is_valid_state(self, bot_geoms: list[FootprintEntry]) -> bool:
-        """Return True if none of the geometries intersect any obstacle and all lie within the boundary."""
-        for ox, oy, g in bot_geoms:
-            minx, miny, maxx, maxy = g.bounds
-            bounds = (minx + ox, miny + oy, maxx + ox, maxy + oy)
-
-            if not self._within_bounds(bounds):
-                return False
-
-            # Broad-phase rejection
-            if not self.has_possible_collision(bounds):
-                continue
-
-            # Very rare, also very expensive. Not called in the majority of cases.
-            # Only translate if the geometry isn't already placed.
-            if ox != 0.0 or oy != 0.0:
-                positioned = translate(g, xoff=ox, yoff=oy)
-            else:
-                positioned = g
-            if intersects_any(self.obstacles, positioned):
-                return False
-
-        return True
+#let validator = code-block()[
 ```
+function IS_VALID_STATE(geometries):
+    for each geometry in geometries:
+        if geometry is a line segment:
+            if any endpoint lies outside the environment boundary:
+                return false
+            if the segment intersects an obstacle:
+                return false
+        else: // Geometry is a rotated rectangle
+            compute translated axis-aligned bounding box
+            if bounding box lies outside the environment boundary:
+                return false
+            if no obstacle can possibly overlap the bounding box:
+                continue  // broad-phase rejection
+            compute translated geometry
+            if geometry intersects any obstacle:
+                return false
+    return true
+```
+]
 
-At the fundamental level the state validator works with shapely: defining the vehicles and environment geometrically and then call the `intersects` method with the two. I did start using the C API for shapely, and stored the obstacles as an #link("https://shapely.readthedocs.io/en/stable/strtree.html#shapely.STRtree")[STRTree], but its still the same idea. I could likely replace this with an implementation of the Separating Axis Theorem, but I didn't believe it was worth the time to do so. According to #link("https://docs.python.org/3/library/profile.html")[Cprofile], calls to the STRtree function only take up 1% of the hybrid A\* runtime #footnote[Ran with a seed of 11, grid spacing of 1, angular spacing of $frac(pi, 3)$], so I decided to focus on improving other parts of the program.
+#figure(validator, caption: "Pseudocode describing state validation process.")
+
+The state validator function accepts a list o representing the current state
+
+The general approach for the state validator function focused around filtering the rectangle checks with cheap checks before calling expensive shapely functions.
+
+The state validator, basically
+
+I could likely replace this with an implementation of the Separating Axis Theorem, but I didn't believe it was worth the time to do so. According to #link("https://docs.python.org/3/library/profile.html")[Cprofile], calls to the STRtree function only take up 5% of the hybrid A\* runtime #footnote[Ran with a seed of 11, grid spacing of 1, angular spacing of $frac(pi, 3)$], so I decided to focus on improving other parts of the program.
+
+
+
+
+
+
+
+
 
 As an example, the code for defining the trailer geometry can be seen below. It constructs two rectangles using the constants described in the assignment and the current state variables:
 
@@ -117,13 +148,13 @@ def truck_trailer_geom(x, y, theta, phi):
             stroke: 2pt + black,
             radius: 5pt,
             inset: 5pt,
-            image("../media/trailer_clear.png"),
+            image("media/trailer_clear.png"),
         ),
         box(
             stroke: 2pt + black,
             radius: 5pt,
             inset: 5pt,
-            image("../media/trailer_collision.png"),
+            image("media/trailer_collision.png"),
         )
     ),
     caption: "Example of collision detection on trailer. The connection length has been exaggerated."
@@ -138,7 +169,7 @@ An example of the collision detection can be seen above with the truck and trail
 I had a lot of difficulty with getting a state lattice set up. This mainly revolved around properly simultating the kinematics of the system and making sure that the state lattice was properly aligned throughout the process. I was able to get a very rough version working, but it failed to regularly tile the state space, as I was just propogating out from headings rather than actually going to regular nodes that could easily be searched using A\*. It could get within a very rough radius, but not close enough to be consistent:
 
 #figure(
-    image("../media/test_lattice.png"),
+    image("media/test_lattice.png"),
     caption: "results from experimenting with rudimentary state latticing."
 )
 

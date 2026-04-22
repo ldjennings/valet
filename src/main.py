@@ -1,3 +1,11 @@
+"""
+Entry point for the Valet simulator.
+
+Parses command-line arguments, constructs the environment and bot, and hands
+control to the Simulator. All scenario geometry (start/goal positions) is
+defined here so that implementation files stay free of hard-coded layouts.
+"""
+
 import argparse
 import math
 import random
@@ -9,7 +17,14 @@ from environment import ObstacleEnvironment
 from planner import HybridConfig
 
 
+# ── Coordinate helpers ────────────────────────────────────────────────────────
+
 def grid_to_coords(x_cell: float, y_cell: float, center: bool = True) -> tuple[float, float]:
+    """Convert grid cell indices to world coordinates (meters).
+
+    By default, returns the center of the cell. Pass center=False to get the
+    top-left corner instead.
+    """
     if center:
         x_cell += 0.5
         y_cell += 0.5
@@ -46,7 +61,12 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-# (start_col, start_row) from top-left; (col_offset, row_offset) from bottom-right
+# ── Scenario definitions ──────────────────────────────────────────────────────
+
+# Per-bot start and goal positions in grid-cell coordinates.
+# Start is (col, row) from the top-left corner.
+# Goal is expressed as (col_offset, row_offset) subtracted from the bottom-right corner,
+# so the goal stays a fixed distance from the edge regardless of grid size.
 _SCENARIOS: dict[str, tuple[tuple[float, float], tuple[float, float]]] = {
     "point":   ((0,   0), (3.5,   1)),
     "diff":    ((0,   0), (3.5,   1)),
@@ -56,6 +76,7 @@ _SCENARIOS: dict[str, tuple[tuple[float, float], tuple[float, float]]] = {
 
 
 def _make_scenario(bot_type: str, seed: int | None):
+    """Construct the bot bundle and environment for a given bot type."""
     start_col, start_row     = _SCENARIOS[bot_type][0]
     col_offset, row_offset   = _SCENARIOS[bot_type][1]
 
@@ -73,11 +94,14 @@ def _make_scenario(bot_type: str, seed: int | None):
     return bundle, environment
 
 
+# ── Entry point ───────────────────────────────────────────────────────────────
+
 def main() -> None:
     args = parse_args()
 
     seed = args.seed if args.seed is not None else random.randint(0, 2**32 - 1)
     print(f"Using seed: {seed}  (re-run with -s {seed} to reproduce)")
+    
     bundle, environment = _make_scenario(args.bot_type, seed)
     config = HybridConfig(spacing=1, angular_spacing=math.pi / 3, max_iterations=25000, fine_collision=False)
 

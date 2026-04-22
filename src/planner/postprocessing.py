@@ -35,7 +35,7 @@ def smooth_path(
     Probabilistic path shortcutting. Repeatedly picks two random indices, attempts
     a direct connection via bot.generate_trajectory, and replaces the span if the
     shortcut is collision-free. Skipped entirely for TrailerBot since
-    generate_trajectory doesnt guarantee the trailer heading will match up.
+    generate_trajectory doesn't guarantee the trailer heading will match up.
     """
     if isinstance(bot, TrailerBot):
         return path

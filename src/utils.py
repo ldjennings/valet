@@ -1,8 +1,8 @@
 """
-Shared math and state utilities used across Bots and Planner packages.
+Shared math and geometry utilities used across the Bots and Planner packages.
 
-Consolidates duplicated angle-wrapping, state unpacking, interpolation,
-and Reeds-Shepp boilerplate into a single module.
+Covers angle arithmetic, spatial interpolation, analytic arc trajectories,
+and Reeds-Shepp path helpers.
 """
 
 import math
@@ -14,10 +14,14 @@ Position = NewType('Position', tuple[float, float])
 Pose = NewType('Pose', tuple[float, float, float])
 
 
+# ── Step counting ─────────────────────────────────────────────────────────────
+
 def steps_to_cover(total: float, step_size: float, minimum: int = 1) -> int:
     """Minimum number of steps of `step_size` needed to cover `total`."""
     return max(minimum, math.ceil(total / step_size))
 
+
+# ── Angle arithmetic ──────────────────────────────────────────────────────────
 
 def wrap_angle(delta: float) -> float:
     """Wrap an angular difference to [-π, π]."""
@@ -49,6 +53,8 @@ def linspace_angles(a: float, b: float, resolution: float) -> list[float]:
 
 
 
+# ── Spatial helpers ───────────────────────────────────────────────────────────
+
 def center_distance(p1: Position, p2: Position) -> float:
     """Euclidean distance between the position components of two states."""
     x1, y1 = p1
@@ -75,6 +81,8 @@ def linspace_xy(p1: Position, p2: Position, resolution: float
     return [Position((x, y)) for x, y in ps]
 
 
+# ── Trajectory generation ─────────────────────────────────────────────────────
+
 def arc_trajectory(x0: float, y0: float, h0: float,
                    v: float, omega: float,
                    n_steps: int, dt: float) -> np.ndarray:
@@ -94,8 +102,8 @@ def arc_trajectory(x0: float, y0: float, h0: float,
         x(i) = x0 + R·(sin(h(i)) - sin(h0))
         y(i) = y0 - R·(cos(h(i)) - cos(h0))
 
-    The omega != 0 formula is accounted for, so function covers
-    straight trajectories, in addition to the arc, and in-place rotation primitives.
+    Both branches are handled, so this covers straight lines, circular arcs,
+    and in-place rotation primitives (v=0, omega≠0).
     """
     arr = np.empty((n_steps + 1, 3))
     arr[0, 0] = x0
@@ -118,6 +126,8 @@ def arc_trajectory(x0: float, y0: float, h0: float,
     return arr
 
 
+# ── Reeds-Shepp helpers ───────────────────────────────────────────────────────
+
 def rs_path_length(start, goal, turning_radius: float) -> float:
     """Reeds-Shepp path length between two states (ignoring obstacles)."""
     x0, y0, h0, *_ = start
@@ -136,6 +146,7 @@ def rs_path_sample(start: Pose, goal: Pose, turning_radius: float, resolution: f
 
 
 def arc_len(p1: Pose, p2: Pose, ang_weight: float) -> float:
+    """Weighted pose distance: Euclidean XY distance plus angular difference scaled by ang_weight."""
     x1, y1, h1 = p1
     x2, y2, h2 = p2
     return center_distance(Position((x1, y1)), Position((x2, y2))) + angle_difference(h1, h2) * ang_weight

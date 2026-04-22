@@ -69,9 +69,12 @@ def place(base: BaseGeometry, x: float, y: float, angle_rad: float) -> BaseGeome
 
 
 def point_geom(base: BaseGeometry, state: PointState) -> BaseGeometry:
+    """Translate the base circle to the point bot's world position."""
     x, y = state.position()
     return translate(base, xoff=x, yoff=y)
 
+
+# ── Footprint types ────────────────────────────────────────────────────────────
 
 @dataclass(frozen=True, slots=True)
 class LineFootprint:
@@ -82,6 +85,7 @@ class LineFootprint:
     y1: float
 
 
+# (x_offset, y_offset, geometry, bounds) — offset is (0,0) for exact, (x,y) for approximate
 RectFootprint: TypeAlias = tuple[float, float, BaseGeometry, tuple[float, float, float, float]]
 FootprintEntry: TypeAlias = RectFootprint | LineFootprint
 

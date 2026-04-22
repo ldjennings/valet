@@ -19,6 +19,7 @@ from simulator.Bundle import BotBundle
 
 
 class Simulator(Generic[S]):
+    """Orchestrates planning, animation, and optional recording for one session."""
 
     def __init__(
         self,
@@ -31,6 +32,12 @@ class Simulator(Generic[S]):
         self.config      = config
 
     def run(self, manual: bool = False, record: bool = False) -> None:
+        """Run the simulation loop.
+
+        In planning mode, runs hybrid A* first then animates the resulting path.
+        In manual mode, the bot is driven by keyboard input each frame.
+        Recording captures every frame where a path exists and saves on exit.
+        """
         bot   = self.bundle.bot
         state = self.bundle.start
         goal  = self.bundle.goal

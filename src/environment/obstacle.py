@@ -1,3 +1,11 @@
+"""
+Obstacle environment: collision detection and state validation.
+
+ObstacleEnvironment wraps the occupancy grid and a Shapely STRtree of obstacle
+polygons. Collision queries use a three-phase strategy — bounds check, broad-phase
+grid lookup, exact Shapely intersection — to keep the common (free) case cheap.
+"""
+
 from environment.grid import populate_grid, clear_start_goal
 from bots.geometry import LineFootprint, FootprintEntry
 
@@ -11,9 +19,13 @@ from typing import Final
 
 
 
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
 def intersects_any(tree: STRtree, geom: BaseGeometry) -> bool:
     """Return True if `geom` intersects any geometry in `tree`."""
     return len(tree.query(geom, predicate='intersects')) > 0
+
+# ── Environment ───────────────────────────────────────────────────────────────
 
 class ObstacleEnvironment:
     """
@@ -88,33 +100,14 @@ class ObstacleEnvironment:
         return False
 
     def _has_possible_collision(self, bounds) -> bool:
+        """Conservative broad-phase check: True if any obstacle cell overlaps the AABB.
+
+        Converts the bounding box to grid indices and checks whether any cell in
+        that region is occupied. A False result guarantees no collision; True means
+        the exact check is needed.
+
+        Must be called after _within_bounds — does not guard against out-of-range indices.
         """
-        Fast broad-phase collision check between a geometry and the occupancy grid.
-
-        This method:
-        1. Computes the axis-aligned bounding box (AABB) of the input geometry.
-        2. Converts that AABB into grid index space.
-        3. Slices the corresponding subgrid region.
-        4. Determines if any of those cells are occupied
-
-        This is a conservative test:
-        - Returns True if there could be a collision
-        - Returns False if there is definitely no collision.
-
-        It is intended as a broad-phase rejection step before more precise checks.
-
-        **DOES NOT CHECK IF THE AABB IS INSIDE GRID, CAN THROW ERRORS**
-
-        **EXPECTED TO BE APPLIED AFTER `_within_bounds`**
-
-        Args:
-            g: A Shapely geometry (typically your OBB robot shape).
-
-        Returns:
-            bool: True if any occupied grid cell lies within the geometry's AABB,
-                False otherwise.
-        """
-        # minx, miny, maxx, maxy = g.bounds
         minx, miny, maxx, maxy = bounds
 
         # Convert world coordinates → grid indices
@@ -123,20 +116,7 @@ class ObstacleEnvironment:
         min_j = int(miny // self.cell_size)
         max_j = int(maxy // self.cell_size)
 
-        # # Clamp to grid bounds to avoid slicing errors
-        # min_i = max(min_i, 0)
-        # min_j = max(min_j, 0)
-        # max_i = min(max_i, self.grid.shape[1] - 1)
-        # max_j = min(max_j, self.grid.shape[0] - 1)
-
-        # # If the AABB lies completely outside the grid, no collision
-        # if min_i > max_i or min_j > max_j:
-        #     return False
-
-        # Slice the candidate region
         subgrid = self.grid[min_j:max_j + 1, min_i:max_i + 1]
-
-        # Check if any in the region are actually occupied
         return bool(subgrid.any())
 
     def _within_bounds(self, bounds) -> bool:

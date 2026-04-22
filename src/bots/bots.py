@@ -60,10 +60,6 @@ class Bot(Protocol[S]):
     structurally based on method signatures alone.
     """
 
-    def speed(self) -> float:
-        """Planning speed in m/s. Used by propagated_primitives to scale arc length to grid spacing."""
-        ...
-
     def footprint(self, state: S, approximate: bool = False) -> list[FootprintEntry]:
         """Returns the robot's collision geometries as (x_offset, y_offset, geometry) tuples.
         Translating shapely geometry is surprisingly expensive, for now the following applies as an optimization:
@@ -132,6 +128,8 @@ class Bot(Protocol[S]):
 
 
 
+# ── Base class ────────────────────────────────────────────────────────────────
+
 class BotBase:
     """Shared implementations for heuristic, is_terminal, and at_goal.
 
@@ -146,7 +144,6 @@ class BotBase:
     trailer_heading_tol: float
     SPEED = STANDARD_SPEED
 
-    def speed(self) -> float: return self.SPEED
 
     def is_terminal(self, state: S, goal: S) -> bool:
         return center_distance(state.position(), goal.position()) < self.TERMINAL_RADIUS
@@ -174,6 +171,8 @@ class BotBase:
                 raise AssertionError(f"Unhandled state pair: {type(unreachable)}")
 
 
+# ── PointBot ──────────────────────────────────────────────────────────────────
+
 class PointBot(BotBase):
     """Holonomic point robot. Can move in any direction; no heading or turning constraints."""
 
@@ -197,11 +196,13 @@ class PointBot(BotBase):
             return [PointState(*p) for p in linspace_xy(start.position(), goal.position(), resolution)]
 
     def propagate(self, state: PointState, spacing: float, angular_spacing: float, steering_granularity: int) -> list[tuple[list[PointState], float]]:
+        """Generate one primitive per compass direction (8-connected).
+
+        n_steps is chosen so the diagonal displacement per axis >= spacing:
+        diagonal per-axis = n * step / sqrt(2) >= spacing → n >= spacing * sqrt(2) / step.
+        angular_spacing and steering_granularity are unused — PointBot has no heading.
+        """
         step = self.SPEED * cfg.DT
-        # For a point bot, every direction displaces equally (step per tick).
-        # n_steps so that diagonal displacement per axis >= spacing:
-        # diagonal per-axis = n * step / sqrt(2) >= spacing → n >= spacing * sqrt(2) / step
-        # angular_spacing is unused — point bot has no heading.
         n_steps = steps_to_cover(spacing * math.sqrt(2), step)
         arc_length = step * n_steps  # each step has magnitude `step` regardless of direction
         trajectories = []
@@ -234,6 +235,8 @@ class PointBot(BotBase):
 
 
 
+
+# ── DiffBot ───────────────────────────────────────────────────────────────────
 
 class DiffBot(BotBase):
     """Differential drive robot. Can rotate in place; forward/backward and in-place turning."""
@@ -338,6 +341,8 @@ class DiffBot(BotBase):
 
 
 
+# ── CarBot ────────────────────────────────────────────────────────────────────
+
 class CarBot(BotBase):
     """Ackermann steering (car-like) robot. Non-holonomic; minimum turning radius determined by MAX_STEER."""
 
@@ -369,6 +374,7 @@ class CarBot(BotBase):
         return [(0, 0, g, g.bounds)]
 
     def generate_trajectory(self, start: CarState, goal: CarState, resolution: float = 0.1) -> list[CarState] | None:
+        """Connect start to goal via a Reeds-Shepp path. Returns None if pyReedsShepp finds no path."""
         raw = rs_path_sample(start.pose(), goal.pose(), self.turning_radius, resolution)
         if raw is None:
             return None
@@ -377,12 +383,10 @@ class CarBot(BotBase):
         return path
 
     def propagate(self, state: CarState, spacing: float, angular_spacing: float, steering_granularity: int) -> list[tuple[list[CarState], float]]:
-        # figure out what angular velocities we are testing
         deltas = [
             self.MAX_STEER * i / steering_granularity
             for i in range(-steering_granularity, steering_granularity + 1)
         ]
-        # starting point
         x0, y0, h0 = state.pose()
         trajectories = []
         for v in (self.SPEED, -self.SPEED):
@@ -417,6 +421,8 @@ class CarBot(BotBase):
 
 
 
+# ── TrailerBot ────────────────────────────────────────────────────────────────
+
 class TrailerBot(BotBase):
     """
     Truck-and-trailer system. The truck uses Ackermann steering; the trailer follows
@@ -426,6 +432,7 @@ class TrailerBot(BotBase):
 
     MAX_STEER       = math.radians(35)
     TERMINAL_RADIUS = 15.0
+    JACKKNIFE_LIMIT = math.pi / 2  # max allowed angle between truck and trailer headings
 
     def __init__(
         self,
@@ -461,6 +468,12 @@ class TrailerBot(BotBase):
     def generate_trajectory(
         self, start: TrailerState, goal: TrailerState, resolution: float = 0.1
     ) -> list[TrailerState] | None:
+        """Connect start to goal via a Reeds-Shepp path with trailer heading integrated along the way.
+
+        The truck follows the RS path; the trailer heading is propagated using the
+        hitch ODE at each step. Returns None if no RS path exists or if the path
+        causes a jackknife.
+        """
         raw = rs_path_sample(start.pose(), goal.pose(), self.turning_radius, resolution)
         if raw is None:
             return None
@@ -484,8 +497,6 @@ class TrailerBot(BotBase):
             states.append(TrailerState(x1, y1, theta, phi))
 
         return states
-
-    JACKKNIFE_LIMIT = math.pi / 2
 
     def propagate(self, state: TrailerState, spacing: float, angular_spacing: float, steering_granularity: int) -> list[tuple[list[TrailerState], float]]:
         deltas = [

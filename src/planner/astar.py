@@ -1,10 +1,20 @@
+"""
+Hybrid A* planner.
+
+Searches a continuous state space by propagating motion primitives from each
+expanded node, discretising states into a grid for duplicate detection. When a
+node is close enough to the goal, a one-shot closed-form trajectory
+(generate_trajectory) is attempted; if it is collision-free the search
+terminates. The returned path is then smoothed and resampled by postprocessing.
+"""
+
 from dataclasses import dataclass, field
 import math
 from typing import Generic, cast, TypeAlias
 import heapq
 
 from bots import S, Bot
-from bots.state import Rotateable
+from bots.state import Rotateable, TrailerState
 from utils import Position, angle_distance, center_distance, direction
 from environment.obstacle import ObstacleEnvironment
 from planner.postprocessing import smooth_path, resample_path
@@ -22,8 +32,11 @@ class HybridConfig():
     fine_collision:         bool            = True          # False = only center-point + coarse checks (faster, less accurate)
 
 
+# ── Data types ────────────────────────────────────────────────────────────────
+
 @dataclass(frozen=True)
 class Primitive(Generic[S]):
+    """A single motion primitive: a trajectory segment and its associated cost."""
     trajectory: list[S]
     cost: float
 
@@ -35,13 +48,33 @@ class Primitive(Generic[S]):
     def endpoint(self) -> S:
         return self.trajectory[-1]
 
-
     def __lt__(self, other: "Primitive") -> bool:
         return self.cost < other.cost
 
 
+NodeKey: TypeAlias = tuple[int, ...]
+
+@dataclass
+class PlanResult(Generic[S]):
+    """Return value of hybrid_astar: the planned path plus debug visualisation data."""
+    path:       list[S] | None
+    visited_xy: list[tuple[float, float]]   # (x, y) of every expanded node, for debug viz
+
+
+@dataclass(order=True)
+class SearchNode(Generic[S]):
+    """A* search node, ordered by f_cost for the min-heap."""
+    f_cost: float                                                       # g + h, used for heap ordering
+    g_cost: float               = field(compare=False)                  # cost so far
+    state: S                    = field(compare=False)                  # continuous state
+    parent: "SearchNode | None" = field(compare=False, default=None)
+    trajectory: list[S]  | None = field(compare=False, default=None)    # trajectory FROM parent TO this node
+
+
 ROTATION_COST_WEIGHT = 0.5  # cost per radian of heading change; keeps rotate-in-place nonzero
 
+
+# ── Primitive helpers ─────────────────────────────────────────────────────────
 
 def _is_reverse(traj: list[Rotateable]) -> bool:
     """True if the primitive moves opposite to the starting heading (reverse gear)."""
@@ -87,24 +120,16 @@ def propagated_primitives(bot: Bot, state: S, config: HybridConfig, steering_gra
     return primitives
 
 
-NodeKey: TypeAlias = tuple[int, ...]
-
-@dataclass
-class PlanResult(Generic[S]):
-    path:       list[S] | None
-    visited_xy: list[tuple[float, float]]   # (x, y) of every expanded node, for debug viz
-
-
-@dataclass(order=True)
-class SearchNode(Generic[S]):
-    f_cost: float                                                       # g + h, used for heap ordering
-    g_cost: float               = field(compare=False)                  # cost so far
-    state: S                    = field(compare=False)                  # continuous state
-    parent: "SearchNode | None" = field(compare=False, default=None)
-    trajectory: list[S]  | None = field(compare=False, default=None)    # trajectory FROM parent TO this node
-
+# ── Path reconstruction ───────────────────────────────────────────────────────
 
 def reconstruct_path(node: SearchNode[S], final_path: list[S] | None = None) -> list[S]:
+    """Walk the parent chain to assemble the full trajectory.
+
+    Each node stores the trajectory segment that led to it, so the path is built
+    by reversing the chain and concatenating segments (dropping the duplicate
+    shared endpoint between adjacent segments). An optional final_path (e.g. a
+    closed-form goal connection) is appended at the end.
+    """
     arcs = []
     while node.parent is not None:
         arcs.append(node.trajectory)
@@ -128,11 +153,17 @@ def validate_path(
     obstacles: ObstacleEnvironment, bot: Bot, path: list[S],
     coarse_step: int = 4, fine_checking: bool = True,
 ) -> bool:
-    # this is the most expensive method in the whole program, so steps have been taken to optimize it.
+    """Check whether a path is collision-free.
 
-    # Phase 1: Check sparse subset (endpoint + every Nth).
-    # Uses approximate (cached) footprints for speed during search.
+    This is the most expensive method in the whole program. Two-phase checking
+    is used to keep it fast in the common (invalid) case:
 
+    Phase 1 — sparse coarse check: tests the last state plus every Nth state
+    using approximate (pre-cached) footprints. Most invalid paths are rejected here.
+
+    Phase 2 — dense fine check (optional): tests remaining states with exact
+    footprints. Only reached by paths that passed the coarse check.
+    """
     # always check last state, exit early if invalid
     if not obstacles.is_valid_state(bot.footprint(path[-1], approximate=True)):
         return False
@@ -153,6 +184,8 @@ def validate_path(
     return True
 
 
+# ── State discretisation ──────────────────────────────────────────────────────
+
 def discretize(state: S, config: HybridConfig) -> NodeKey:
     """
     Map a continuous state to a discrete grid cell for A* visited/g_score tracking.
@@ -160,23 +193,25 @@ def discretize(state: S, config: HybridConfig) -> NodeKey:
     XY is rounded to the nearest spacing multiple.  Headings use floor + modulo
     so that 0 and 2π map to the same bin (round would create a spurious extra bin).
     """
-    x, y, *rest = state
+    x, y = state.position()
     key: NodeKey = (round(x / config.spacing), round(y / config.spacing))
 
-    if rest:
-        n_heading_bins = round(2 * math.pi / config.angular_spacing)
-        heading = rest[0] % (2 * math.pi)
-        key += (int(heading / config.angular_spacing) % n_heading_bins,)
+    if isinstance(state, Rotateable):
+        n_bins = round(2 * math.pi / config.angular_spacing)
+        heading = state.heading() % (2 * math.pi)
+        key += (int(heading / config.angular_spacing) % n_bins,)
 
-    if len(rest) > 1:
-        trailer_res = config.trailer_spacing if config.trailer_spacing is not None else config.angular_spacing
-        n_trailer_bins = round(2 * math.pi / trailer_res)
-        trailer_heading = rest[1] % (2 * math.pi)
-        key += (int(trailer_heading / trailer_res) % n_trailer_bins,)
+    if isinstance(state, TrailerState):
+        trailer_res = config.trailer_spacing or config.angular_spacing
+        n_bins = round(2 * math.pi / trailer_res)
+        trailer_heading = state.trailer_heading_rad % (2 * math.pi)
+        key += (int(trailer_heading / trailer_res) % n_bins,)
 
     return key
 
 
+
+# ── Search ────────────────────────────────────────────────────────────────────
 
 def hybrid_astar(
         env: ObstacleEnvironment,
@@ -186,6 +221,16 @@ def hybrid_astar(
         config: HybridConfig,
         debug: bool = False,
     ) -> PlanResult[S]:
+    """Run hybrid A* from start to goal and return the planned path.
+
+    At each expansion, motion primitives are generated via bot.propagate() and
+    validated for collisions. When a node falls within terminal range of the goal,
+    a one-shot closed-form trajectory (bot.generate_trajectory) is attempted as
+    the final connection. The resulting path is smoothed and resampled before
+    being returned.
+
+    Returns a PlanResult with path=None if no path is found within max_iterations.
+    """
 
     LOG_INTERVAL = 500  # print a status line every N expansions
 

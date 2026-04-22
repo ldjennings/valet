@@ -226,6 +226,11 @@ S = TypeVar("S", PointState, DiffState, CarState, TrailerState)
 
 
 def trajectory_length(traj: list[S], ang_weight: float) -> float:
+    """Sum of weighted pose distances along a trajectory.
+
+    For Rotateable states, each step contributes XY distance + angular difference * ang_weight.
+    For PointState, contributes XY distance only.
+    """
     if len(traj) == 0:
         return 0.0
 
