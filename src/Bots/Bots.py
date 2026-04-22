@@ -17,7 +17,7 @@ from Bots.BotState import (
     CarState,
     TrailerState,
 )
-from utils import angle_difference, pos, angs, center_distance, angle_distance, linspace_angles, linspace_xy, rs_path_sample, steps_to_cover
+from utils import angle_difference, direction, center_distance, angle_distance, linspace_xy, rs_path_sample, steps_to_cover, Position
 from Bots.geometry_helpers import (
     point_geom, place, truck_trailer_approximate, truck_trailer_geom,
     make_point_base, make_centered_rect_base, make_axle_rect_base,
@@ -159,27 +159,36 @@ class BotBase:
 
     TERMINAL_RADIUS: float
     goal_radius_tol: float
-    angular_tolerances: tuple[float, ...] = ()
+    goal_heading_tol: float
+    trailer_heading_tol: float
     SPEED = STANDARD_SPEED
 
     def speed(self) -> float: return self.SPEED
 
-    def is_terminal(self, state, goal) -> bool:
-        return center_distance(state, goal) < self.TERMINAL_RADIUS
+    def is_terminal(self, state: S, goal: S) -> bool:
+        return center_distance(state.position(), goal.position()) < self.TERMINAL_RADIUS
 
-    def heuristic(self, state, goal) -> float:
-        return center_distance(state, goal)
+    def heuristic(self, state: S, goal: S) -> float:
+        return center_distance(state.position(), goal.position())
 
-    def at_goal(self, state, goal) -> bool:
-        if center_distance(state, goal) >= self.goal_radius_tol:
+    def at_goal(self, state: S, goal: S) -> bool:
+        if center_distance(state.position(), goal.position()) >= self.goal_radius_tol:
             return False
-        state_angs = angs(state)
-        goal_angs = angs(goal)
-        if state_angs and goal_angs:
-            for sa, ga, tol in zip(state_angs, goal_angs, self.angular_tolerances):
-                if angle_distance(sa, ga) >= tol:
-                    return False
-        return True
+        match (state, goal):
+            case (PointState(), PointState()):
+                return True
+            case (DiffState(heading_rad=h0), DiffState(heading_rad=h1)):
+                return angle_distance(h0, h1) < self.goal_heading_tol
+            case (CarState(heading_rad=h0), CarState(heading_rad=h1)):
+                return angle_distance(h0, h1) < self.goal_heading_tol
+            case (TrailerState(heading_rad=h0, trailer_heading_rad=th0),
+                TrailerState(heading_rad=h1, trailer_heading_rad=th1)):
+                return (
+                    angle_distance(h0, h1) < self.goal_heading_tol and
+                    angle_distance(th0, th1) < self.trailer_heading_tol
+                )
+            case _ as unreachable:
+                raise AssertionError(f"Unhandled state pair: {type(unreachable)}")
 
 
 class PointBot(BotBase):
@@ -192,7 +201,7 @@ class PointBot(BotBase):
         self._base = make_point_base()
 
     def footprint(self, state: PointState, approximate: bool = False) -> list[FootprintEntry]:
-        x, y = pos(state)
+        x, y = state.position()
         if approximate:
             return [(x, y, self._base)]
         return [(0, 0, point_geom(self._base, state))]
@@ -201,10 +210,10 @@ class PointBot(BotBase):
         self, start: PointState, goal: PointState, resolution: float = 0.1
     ) -> list[PointState] | None:
             # unpack into tuples
-            (x1, y1) = start
-            (x2, y2) = goal
+            # (x1, y1) = start
+            # (x2, y2) = goal
 
-            return [PointState(*p) for p in linspace_xy((x1, y1), (x2, y2), resolution)]
+            return [PointState(*p) for p in linspace_xy(start.position(), goal.position(), resolution)]
 
     def propagate(self, state: PointState, spacing: float, angular_spacing: float, steering_granularity: int) -> list[list[PointState]]:
         step = self.SPEED * DT
@@ -259,7 +268,8 @@ class DiffBot(BotBase):
         goal_heading_tol: float = math.pi / 12,
     ):
         self.goal_radius_tol = goal_radius_tol
-        self.angular_tolerances = (goal_heading_tol,)
+        # self.angular_tolerances = (goal_heading_tol,)
+        self.goal_heading_tol = goal_heading_tol
         self._base = make_centered_rect_base(length, width)
         self._cache = build_heading_cache(self._base)
 
@@ -279,28 +289,31 @@ class DiffBot(BotBase):
         so no accumulation error or overshoot.
         """
         states: list[DiffState] = []
-        sx, sy, sh = start
-        gx, gy, gh = goal
+        # sx, sy, sh = start
+        # gx, gy, gh = goal
+        p1 = start.position()
+        p2 = goal.position()
 
-        if center_distance(start, goal) > 1e-3:
+        if center_distance(p1, p2) > 1e-3:
             # Phase 1: rotate to face goal
-            angle_to_goal = math.atan2(gy - sy, gx - sx)
-            for a in linspace_angles(sh, angle_to_goal, resolution):
-                states.append(DiffState(sx, sy, a))
+            angle_to_goal = direction(start.position(), goal.position())
+            facing_goal = DiffState(start.center_x, start.center_y, angle_to_goal)
+            states.extend(start.pure_rotation_linspace(facing_goal, resolution))
 
             # Phase 2: drive straight
-            for (x, y) in linspace_xy((sx, sy), (gx, gy), resolution):
+            for (x, y) in linspace_xy(p1, p2, resolution):
                 states.append(DiffState(x, y, angle_to_goal))
 
             heading_after_drive = angle_to_goal
         else:
             states.append(start)
-            heading_after_drive = sh
+            heading_after_drive = start.heading_rad
 
         # Phase 3: rotate to goal heading
-        if angle_distance(gh, heading_after_drive) > 1e-6:
-            for a in linspace_angles(heading_after_drive, gh, resolution):
-                states.append(DiffState(gx, gy, a))
+        if angle_distance(goal.heading_rad, heading_after_drive) > 1e-6:
+            # for a in linspace_angles(heading_after_drive, goal.heading_rad, resolution):
+            #     states.append(DiffState(gx, gy, a))
+            states.extend(states[-1].pure_rotation_linspace(goal, resolution))
 
         return states
 
@@ -366,7 +379,8 @@ class CarBot(BotBase):
         self.wheelbase = wheelbase
         self.turning_radius = wheelbase / math.tan(self.MAX_STEER)
         self.goal_radius_tol = goal_radius_tol
-        self.angular_tolerances = (goal_heading_tol,)
+        self.goal_heading_tol = goal_heading_tol
+        # self.angular_tolerances = (goal_heading_tol,)
         self._base = make_axle_rect_base(wheelbase, length, width)
         self._cache = build_heading_cache(self._base)
 
@@ -378,7 +392,7 @@ class CarBot(BotBase):
         return [(0, 0, place(self._base, x, y, h))]
 
     def generate_trajectory(self, start: CarState, goal: CarState, resolution: float = 0.1) -> list[CarState] | None:
-        raw = rs_path_sample(start, goal, self.turning_radius, resolution)
+        raw = rs_path_sample(start.pose(), goal.pose(), self.turning_radius, resolution)
         if raw is None:
             return None
         path = [CarState(r[0], r[1], r[2]) for r in raw]
@@ -452,7 +466,8 @@ class TrailerBot(BotBase):
         self.hitch_distance = hitch_distance
         self.turning_radius = wheelbase / math.tan(self.MAX_STEER)
         self.goal_radius_tol = goal_radius_tol
-        self.angular_tolerances = (goal_heading_tol, trailer_heading_tol)
+        self.goal_heading_tol = goal_heading_tol
+        self.trailer_heading_tol = trailer_heading_tol
         self._truck_base = make_axle_rect_base(wheelbase, length, width)
         self._trailer_base = make_centered_rect_base(trailer_length, trailer_width)
         self._truck_cache = build_heading_cache(self._truck_base)
@@ -469,10 +484,9 @@ class TrailerBot(BotBase):
     def generate_trajectory(
         self, start: TrailerState, goal: TrailerState, resolution: float = 0.1
     ) -> list[TrailerState] | None:
-        raw = rs_path_sample(start, goal, self.turning_radius, resolution)
+        raw = rs_path_sample(start.pose(), goal.pose(), self.turning_radius, resolution)
         if raw is None:
             return None
-
 
         phi    = start.trailer_heading_rad
         states: list[TrailerState] = [start]
@@ -482,7 +496,7 @@ class TrailerBot(BotBase):
             p0 = (raw[i-1][0], raw[i-1][1])
 
             length_sign  = math.copysign(1.0, raw[i][4])  # s[4] = signed segment length; sign = direction
-            ds           = center_distance((x1, y1), p0)
+            ds           = center_distance(Position((x1, y1)), Position(p0))
 
             # integrate trailer heading along arc (derived from TrailerState.step kinematics)
             phi += length_sign * math.sin(angle_difference(theta, phi)) * ds / self.hitch_distance

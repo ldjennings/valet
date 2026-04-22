@@ -1,6 +1,7 @@
-from Bots import S, Bot, PointState
-from utils import angle_distance, center_distance, direction, heading, trajectory_length
-from typing import Generic
+from Bots import S, Bot, PointState, trajectory_length
+from Bots.BotState import Rotateable
+from utils import Position, angle_distance, center_distance, direction
+from typing import Generic, cast
 from dataclasses import dataclass
 from Planner.AstarConfig import HybridConfig
 import math
@@ -27,23 +28,24 @@ class Primitive(Generic[S]):
 ROTATION_COST_WEIGHT = 0.5  # cost per radian of heading change; keeps rotate-in-place nonzero
 
 
-def _is_reverse(traj: list) -> bool:
+def _is_reverse(traj: list[Rotateable]) -> bool:
     """True if the primitive moves opposite to the starting heading (reverse gear)."""
     start = traj[0]
     next = traj[1]
 
-    if isinstance(start, PointState):
-        return False  # PointBot has no heading
+    x1, y1, h1 = start.pose()
+    x2, y2, _ = next.pose()
 
-    if center_distance(start, next) < 1e-6:
+    p1 = Position((x1,y1))
+    p2 = Position((x2, y2))
+
+    if center_distance(p1, p2) < 1e-6:
         return False  # pure rotation, not reverse
 
-    h = heading(start)
-    assert h is not None
 
     # check to see if the angle between the current heading and the direction of the next state is
     # greater than 90 degrees
-    return angle_distance(direction(start, next), h) > math.pi / 2
+    return angle_distance(direction(p1, p2), h1) > math.pi / 2
 
 
 def propagated_primitives(bot: Bot, state: S, config: HybridConfig, steering_granularity: int = 3) -> list[Primitive]:
@@ -56,8 +58,10 @@ def propagated_primitives(bot: Bot, state: S, config: HybridConfig, steering_gra
     for traj in bot.propagate(state, config.spacing, config.angular_spacing, steering_granularity):
 
         cost = trajectory_length(traj, ROTATION_COST_WEIGHT)
-        if  _is_reverse(traj):
-            cost += config.reverse_cost
+        if  isinstance(traj[0], Rotateable):
+            posed = cast(list[Rotateable], traj)
+            if _is_reverse(posed):
+                cost += config.reverse_cost
 
         primitives.append(Primitive(traj, cost))
     return primitives

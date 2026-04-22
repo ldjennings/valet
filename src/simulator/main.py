@@ -142,7 +142,7 @@ def main() -> None:
     environment = ObstacleEnvironment((cfg.NUM_ROWS, cfg.NUM_COLS), cfg.CELLS_TO_METERS, 0.1, trailer)
 
 
-    conf = HybridConfig(spacing=1, angular_spacing= math.pi / 3,max_iterations= 3000, fine_collision=False)
+    conf = HybridConfig(spacing=1, angular_spacing= math.pi / 3, max_iterations= 15000, fine_collision=False)
 
     run(bundle, environment,conf, args.manual, args.record)
 

@@ -6,4 +6,4 @@ that implements footprint generation, goal checking, and keyboard input handling
 """
 
 from Bots.Bots import Bot, PointBot, DiffBot, CarBot, TrailerBot, DT
-from Bots.BotState import PointState, DiffState, CarState, TrailerState, S
+from Bots.BotState import PointState, DiffState, CarState, TrailerState, S, trajectory_length

@@ -85,7 +85,6 @@ class ObstacleEnvironment:
 
         return False
 
-    # def _geom_AABB_grid_check(self, g:BaseGeometry) -> bool:
     def _geom_AABB_grid_check(self, bounds) -> bool:
         """
         Fast broad-phase collision check between a geometry and the occupancy grid.
@@ -135,13 +134,11 @@ class ObstacleEnvironment:
         # Slice the candidate region
         subgrid = self.grid[min_j:max_j + 1, min_i:max_i + 1]
 
-        # Early exit: any occupied cell in this region?
+        # Check if any in the region are actually occupied
         return bool(subgrid.any())
 
-    # def _within_bounds(self, g: BaseGeometry) -> bool:
     def _within_bounds(self, bounds) -> bool:
         """Fast axis-aligned bounding box containment check."""
-        # minx, miny, maxx, maxy = g.bounds
         minx, miny, maxx, maxy = bounds
         bx0, by0, bx1, by1 = self._bounds
         return minx >= bx0 and miny >= by0 and maxx <= bx1 and maxy <= by1

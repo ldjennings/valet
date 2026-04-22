@@ -10,8 +10,21 @@ All states use @dataclass(frozen=True, slots=True):
 """
 
 from dataclasses import dataclass
-from typing import TypeVar
+from typing import Protocol, Self, TypeVar, cast, runtime_checkable
 import math
+
+from utils import arc_len, center_distance, lerp_angle, linspace_angles, Pose, Position
+
+
+
+@runtime_checkable
+class PointTurnCapable(Protocol):
+    def pure_rotation_linspace(self, end: Self, angular_step: float) -> list[Self]: ...
+
+@runtime_checkable
+class Rotateable(Protocol):
+    def pose(self) -> Pose: ...
+    def heading(self) -> float: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +46,16 @@ class PointState:
     def __iter__(self):
         yield self.x
         yield self.y
+
+    def position(self) -> Position:
+        return Position((self.x, self.y))
+
+    def interpolate(self, end: "PointState", t: float) -> "PointState":
+        return PointState(
+            self.x + t * (end.x - self.x),
+            self.y + t * (end.y - self.y)
+        )
+
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +83,26 @@ class DiffState:
             heading_rad = self.heading_rad + omega * dt,
         )
 
+    def position(self) -> Position:
+        return Position((self.center_x, self.center_y))
+
+    def interpolate(self, end: "DiffState", t: float) -> "DiffState":
+        return DiffState(
+            self.center_x + t * (end.center_x - self.center_x),
+            self.center_y + t * (end.center_y - self.center_y),
+            lerp_angle(self.heading_rad, end.heading_rad, t)
+        )
+
+    def pure_rotation_linspace(self, end: "DiffState", angular_step: float) -> list["DiffState"]:
+        headings = linspace_angles(self.heading_rad, end.heading_rad, angular_step)
+        return [DiffState(self.center_x, self.center_y, h) for h in headings]
+
+    def pose(self) -> Pose:
+        return Pose((self.center_x, self.center_y, self.heading_rad))
+
+    def heading(self) -> float:
+        return self.heading_rad
+
     def __iter__(self):
         yield self.center_x
         yield self.center_y
@@ -71,7 +114,7 @@ class CarState:
     """
     State for a car-like (Ackermann steering) robot: position + heading.
 
-    x/y is the center of the rear axle,  standard kinematic reference 
+    x/y is the center of the rear axle,  standard kinematic reference
     point for car models (Reeds-Shepp, Dubins, bicycle model).
 
     The car cannot rotate in place; turning radius is bounded by max steering angle.
@@ -91,6 +134,22 @@ class CarState:
             heading_rad = self.heading_rad + (v * math.tan(delta) / L) * dt,
         )
 
+    def position(self) -> Position:
+        return Position((self.rear_axle_x, self.rear_axle_y))
+
+    def interpolate(self, end: "CarState", t: float) -> "CarState":
+        return CarState(
+            rear_axle_x= self.rear_axle_x + t * (end.rear_axle_x - self.rear_axle_x),
+            rear_axle_y= self.rear_axle_y + t * (end.rear_axle_y - self.rear_axle_y),
+            heading_rad= lerp_angle(self.heading_rad, end.heading_rad, t)
+        )
+
+    def pose(self) -> Pose:
+        return Pose((self.rear_axle_x, self.rear_axle_y, self.heading_rad))
+
+    def heading(self) -> float:
+        return self.heading_rad
+
     def __iter__(self):
         yield self.rear_axle_x
         yield self.rear_axle_y
@@ -105,7 +164,7 @@ class TrailerState:
     x/y is the center of the truck's rear axle (hitch attachment point).
     heading_rad is the truck's heading in world space.
     trailer_heading_rad is the trailer heading in world space
-    
+
     The trailer motion is fully determined by the truck's motion and the current trailer heading.
     """
 
@@ -131,6 +190,26 @@ class TrailerState:
             trailer_heading_rad = phi + ((v / M) * math.sin(self.heading_rad - phi) * dt)
         )
 
+    def position(self) -> Position:
+        return Position((self.rear_axle_x, self.rear_axle_y))
+
+    def pose(self) -> Pose:
+        return Pose((self.rear_axle_x, self.rear_axle_y, self.heading_rad))
+
+    def heading(self) -> float:
+        return self.heading_rad
+
+    def interpolate(self, end: "TrailerState", t: float) -> "TrailerState":
+        x0,y0, h0, th0 = self
+        x1,y1, h1, th1 = end
+
+        return TrailerState(
+            rear_axle_x=            x0 + t * (x1 - x0),
+            rear_axle_y=            y0 + t * (y1 - y0),
+            heading_rad=            lerp_angle(h0, h1, t),
+            trailer_heading_rad=    lerp_angle(th0, th1, t)
+        )
+
     def __iter__(self):
         yield self.rear_axle_x
         yield self.rear_axle_y
@@ -139,7 +218,31 @@ class TrailerState:
 
 
 # TypeVar constraining S to exactly these four types.
-# Used to make Bot, Primitive, and LatticePlanner generic over the state type,
+# Used to make Bot, Primitive, and Hybrid A* generic over the state types,
 # so Bot[PointState] only accepts PointState, Bot[DiffState] only accepts DiffState, etc.
+# This also makes it so that functions only accept S's of the same type, not allowing mixing.
 # This is purely a static analysis tool, no actual runtime existence.
 S = TypeVar("S", PointState, DiffState, CarState, TrailerState)
+
+
+# # Type var used to specify only "poseable states", ie ones that have a heading
+# # Point bots arent really needed for the assignment, but I'm keeping them in because I can
+# SP = TypeVar("SP", DiffState, CarState, TrailerState)
+
+
+
+def trajectory_length(traj: list[S], ang_weight: float) -> float:
+    if len(traj) == 0:
+        return 0.0
+
+    if isinstance(traj[0], Rotateable):
+        posed = cast(list[Rotateable], traj)
+        return sum(
+            arc_len(p0.pose(), p1.pose(), ang_weight)
+            for p0, p1 in zip(posed, posed[1:])
+        )
+    else:
+        return sum(
+            center_distance(p0.position(), p1.position())
+            for p0, p1 in zip(traj, traj[1:])
+        )

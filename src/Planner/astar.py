@@ -10,7 +10,6 @@ from typing import TypeAlias
 
 import math
 
-from utils import pos
 NodeKey: TypeAlias = tuple[int, ...]
 
 @dataclass
@@ -57,12 +56,12 @@ def validate_path(
     # Uses approximate (cached) footprints for speed during search.
 
     # always check last state, exit early if invalid
-    if not obstacles.is_valid_state(bot.footprint(path[-1], approximate= not fine_checking)):
+    if not obstacles.is_valid_state(bot.footprint(path[-1], approximate=True)):
         return False
 
     # check every nth state in trajectory
     for i in range(0, len(path), coarse_step):
-        if not obstacles.is_valid_state(bot.footprint(path[i], approximate= not fine_checking)):
+        if not obstacles.is_valid_state(bot.footprint(path[i], approximate=True)):
             return False
 
     if fine_checking:
@@ -112,8 +111,8 @@ def hybrid_astar(
 
     LOG_INTERVAL = 500  # print a status line every N expansions
 
-    x0, y0 = pos(start)
-    xg, yg = pos(goal)
+    x0, y0 = start.position()
+    xg, yg = goal.position()
     print(f"[hybrid_astar] searching from ({x0:.2f}, {y0:.2f}) to ({xg:.2f}, {yg:.2f})")
 
     start_key = discretize(start, config)
@@ -140,7 +139,7 @@ def hybrid_astar(
             continue
         visited.add(current_key)
 
-        p = pos(current)
+        p = current.position()
         if debug:
             visited_xy.append(p)
 
