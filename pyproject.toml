@@ -15,7 +15,7 @@
  
 
 [project.scripts]
-runsim="simulator.main:main"
+runsim="main:main"
 
 [tool.mypy]
 python_executable = ".venv/bin/python"
