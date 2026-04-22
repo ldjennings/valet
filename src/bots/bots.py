@@ -140,13 +140,7 @@ class Bot(Protocol[S]):
         """
         ...
 
-    def make_state(self, x: float, y: float, h: float = 0, t: float = 0) -> S:
-        """
-        Construct a state of the appropriate type from raw coordinates.
-        h is the heading in radians; t is the trailer heading in radians (TrailerBot only).
-        Provides a uniform way to create states without knowing the concrete type.
-        """
-        ...
+
 
 
 class BotBase:
@@ -248,8 +242,7 @@ class PointBot(BotBase):
 
         return new_state
 
-    def make_state(self, x: float, y: float, h: float = 0, t:float = 0) -> PointState:
-        return PointState(x, y)
+
 
 
 class DiffBot(BotBase):
@@ -355,8 +348,7 @@ class DiffBot(BotBase):
             omega = speed
         return state.step(v, omega, cfg.DT)
 
-    def make_state(self, x: float, y: float, h: float = 0, t:float = 0) -> DiffState:
-        return DiffState(x, y, h)
+
 
 class CarBot(BotBase):
     """Ackermann steering (car-like) robot. Non-holonomic; minimum turning radius determined by MAX_STEER."""
@@ -433,8 +425,7 @@ class CarBot(BotBase):
 
         return state.step(v, delta, self.wheelbase, cfg.DT)
 
-    def make_state(self, x: float, y: float, h: float = 0, t:float = 0) -> CarState:
-        return CarState(x, y, h)
+
 
 
 class TrailerBot(BotBase):
@@ -553,6 +544,3 @@ class TrailerBot(BotBase):
             delta = self.MAX_STEER
 
         return state.step(v, delta, self.wheelbase, self.hitch_distance, cfg.DT)
-
-    def make_state(self, x: float, y: float, h: float = 0, t:float = 0) -> TrailerState:
-        return TrailerState(x, y, h, t)
