@@ -21,18 +21,17 @@ from utils import angle_difference, direction, center_distance, angle_distance, 
 from bots.geometry import (
     point_geom, place, truck_trailer_approximate, truck_trailer_geom,
     make_point_base, make_centered_rect_base, make_axle_rect_base,
-    build_heading_cache, lookup_cached,
+    build_heading_cache, lookup_cached, FootprintEntry
 )
 
 import math
-from typing import Protocol, TypeAlias
-from shapely.geometry.base import BaseGeometry
+from typing import Protocol
 import pygame
 import config as cfg
 
 # (x_offset, y_offset, geometry, pre_computed_bounds) — offset shifts bounds at check time;
 # geometry is only translated for the rare STRtree narrow-phase check.
-FootprintEntry: TypeAlias = tuple[float, float, BaseGeometry, tuple[float, float, float, float]]
+# FootprintEntry: TypeAlias = tuple[float, float, BaseGeometry, tuple[float, float, float, float]]
 
 
 

@@ -3,6 +3,7 @@ import pygame.gfxdraw
 
 from typing import Generic
 from bots import S, Bot
+from bots.geometry import LineFootprint
 from shapely.geometry import linestring
 import numpy as np
 import config as cfg
@@ -91,10 +92,18 @@ def draw_frame(
     if path:
         draw_path(surface, path, cfg.GRAY)
 
-    for _, _, g, _ in bot.footprint(goal):
-        draw_shape(surface, g, cfg.YELLOW, True, cfg.BLACK)
-    for _, _, g, _ in bot.footprint(state):
-        draw_shape(surface, g, cfg.GREEN, True, cfg.BLACK)
+    for entry in bot.footprint(goal):
+        if isinstance(entry, LineFootprint):
+            pygame.draw.line(surface, cfg.BLACK, scale((entry.x0, entry.y0)), scale((entry.x1, entry.y1)), 3)
+        else:
+            _, _, g, _ = entry
+            draw_shape(surface, g, cfg.YELLOW, True, cfg.BLACK)
+    for entry in bot.footprint(state):
+        if isinstance(entry, LineFootprint):
+            pygame.draw.line(surface, cfg.BLACK, scale((entry.x0, entry.y0)), scale((entry.x1, entry.y1)), 3)
+        else:
+            _, _, g, _ = entry
+            draw_shape(surface, g, cfg.GREEN, True, cfg.BLACK)
 
 def draw_to_screen(screen: pygame.Surface, virtual_screen: pygame.Surface):
     # Preserving aspect ratio

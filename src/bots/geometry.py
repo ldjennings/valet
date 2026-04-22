@@ -13,8 +13,9 @@ from bots.state import PointState, TrailerState
 
 import math
 from shapely.affinity import rotate, translate
-from shapely.geometry import box, Point, LineString
+from shapely.geometry import box, Point
 from shapely.geometry.base import BaseGeometry
+from dataclasses import dataclass
 from typing import TypeAlias
 
 
@@ -77,7 +78,17 @@ def point_geom(base: BaseGeometry, state: PointState) -> BaseGeometry:
 #     return translate(lookup_cached(cache, heading_rad), xoff=x, yoff=y)
 
 
-FootprintEntry: TypeAlias = tuple[float, float, BaseGeometry, tuple[float, float, float, float]]
+@dataclass(frozen=True, slots=True)
+class LineFootprint:
+    """A hitch-bar segment stored as raw endpoints for pure-math grid traversal (no Shapely)."""
+    x0: float
+    y0: float
+    x1: float
+    y1: float
+
+
+RectFootprint: TypeAlias = tuple[float, float, BaseGeometry, tuple[float, float, float, float]]
+FootprintEntry: TypeAlias = RectFootprint | LineFootprint
 
 def truck_trailer_geom(
     state: TrailerState,
@@ -95,14 +106,13 @@ def truck_trailer_geom(
     x_t = x - hitch_distance * math.cos(trailer_heading)
     y_t = y - hitch_distance * math.sin(trailer_heading)
 
-    connection = LineString([(x, y), (x_t, y_t)])
-    truck      = place(truck_base, x, y, truck_heading)
-    trailer    = place(trailer_base, x_t, y_t, trailer_heading)
+    truck   = place(truck_base, x, y, truck_heading)
+    trailer = place(trailer_base, x_t, y_t, trailer_heading)
 
     return [
-        (0, 0, connection, connection.bounds),
-        (0, 0, truck,      truck.bounds),
-        (0, 0, trailer,    trailer.bounds),
+        LineFootprint(x, y, x_t, y_t),
+        (0, 0, truck,   truck.bounds),
+        (0, 0, trailer, trailer.bounds),
     ]
 
 
@@ -120,12 +130,11 @@ def truck_trailer_approximate(
     x_t = x - hitch_distance * math.cos(trailer_h)
     y_t = y - hitch_distance * math.sin(trailer_h)
 
-    connection = LineString([(x, y), (x_t, y_t)])
     truck_geom,   truck_bounds   = lookup_cached(truck_cache,   truck_h)
     trailer_geom, trailer_bounds = lookup_cached(trailer_cache, trailer_h)
 
     return [
-        (0,   0,   connection,  connection.bounds),
-        (x,   y,   truck_geom,  truck_bounds),
+        LineFootprint(x, y, x_t, y_t),
+        (x,   y,   truck_geom,   truck_bounds),
         (x_t, y_t, trailer_geom, trailer_bounds),
     ]
