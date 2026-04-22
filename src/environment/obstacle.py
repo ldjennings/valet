@@ -164,8 +164,8 @@ class ObstacleEnvironment:
              endpoint is reached without a hit.
         """
         cs = self.cell_size
-        cx, cy     = int(x0 / cs), int(y0 / cs)
-        ex, ey     = int(x1 / cs), int(y1 / cs)
+        cx, cy     = int(x0 // cs), int(y0 // cs)
+        ex, ey     = int(x1 // cs), int(y1 // cs)
         dx, dy     = abs(ex - cx), abs(ey - cy)
         sx, sy     = (1 if ex > cx else -1), (1 if ey > cy else -1)
         err        = dx - dy

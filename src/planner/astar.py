@@ -3,7 +3,7 @@ import math
 from typing import Generic, cast, TypeAlias
 import heapq
 
-from bots import S, Bot, trajectory_length
+from bots import S, Bot
 from bots.state import Rotateable
 from utils import Position, angle_distance, center_distance, direction
 from environment.obstacle import ObstacleEnvironment
@@ -65,18 +65,23 @@ def _is_reverse(traj: list[Rotateable]) -> bool:
 
 def propagated_primitives(bot: Bot, state: S, config: HybridConfig, steering_granularity: int = 3) -> list[Primitive]:
     """
-    Call bot.propagate() and wrap each trajectory into a Primitive with arc-length cost.
-    Each bot internally computes per-control n_steps so every primitive displaces
-    at least `config.spacing` in XY and turns at least `config.angular_spacing` in heading.
+    Call bot.propagate() and wrap each (trajectory, arc_length) pair into a Primitive.
+
+    arc_length (translational distance) comes from the bot analytically — exact for
+    constant-curvature arcs, with no per-step summation loop.  The angular cost is
+    computed here in O(1) from the endpoint heading difference, and the reverse
+    penalty is applied if the primitive moves against the starting heading.
     """
     primitives = []
-    for traj in bot.propagate(state, config.spacing, config.angular_spacing, steering_granularity):
-
-        cost = trajectory_length(traj, ROTATION_COST_WEIGHT)
-        if  isinstance(traj[0], Rotateable):
+    for traj, arc_length in bot.propagate(state, config.spacing, config.angular_spacing, steering_granularity):
+        if isinstance(traj[0], Rotateable):
             posed = cast(list[Rotateable], traj)
+            heading_change = angle_distance(posed[-1].heading(), posed[0].heading())
+            cost = arc_length + heading_change * ROTATION_COST_WEIGHT
             if _is_reverse(posed):
                 cost += config.reverse_cost
+        else:
+            cost = arc_length
 
         primitives.append(Primitive(traj, cost))
     return primitives

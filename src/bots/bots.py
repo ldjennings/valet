@@ -126,9 +126,9 @@ class Bot(Protocol[S]):
         """
         ...
 
-    def propagate(self, state: S, spacing: float, angular_spacing: float, steering_granularity: int) -> list[list[S]]:
+    def propagate(self, state: S, spacing: float, angular_spacing: float, steering_granularity: int) -> list[tuple[list[S], float]]:
         """
-        Generate one trajectory per sampled control input.
+        Generate one (trajectory, arc_length) pair per sampled control input.
 
         Each trajectory is long enough that its XY displacement covers at least
         `spacing` meters, so every primitive lands in a new grid cell.
@@ -136,6 +136,9 @@ class Bot(Protocol[S]):
         at least `angular_spacing` radians, ensuring they land in a distinct heading bin.
         `steering_granularity` controls how many steering/omega values are
         sampled between 0 and max on each side (e.g. 3 → [-max, -2/3, -1/3, 0, 1/3, 2/3, max]).
+
+        arc_length is the translational distance only (|v| * n_steps * dt), exact for
+        constant-curvature arcs. The caller adds the angular cost from the endpoint states.
         """
         ...
 
@@ -206,13 +209,14 @@ class PointBot(BotBase):
     ) -> list[PointState] | None:
             return [PointState(*p) for p in linspace_xy(start.position(), goal.position(), resolution)]
 
-    def propagate(self, state: PointState, spacing: float, angular_spacing: float, steering_granularity: int) -> list[list[PointState]]:
+    def propagate(self, state: PointState, spacing: float, angular_spacing: float, steering_granularity: int) -> list[tuple[list[PointState], float]]:
         step = self.SPEED * cfg.DT
         # For a point bot, every direction displaces equally (step per tick).
         # n_steps so that diagonal displacement per axis >= spacing:
         # diagonal per-axis = n * step / sqrt(2) >= spacing → n >= spacing * sqrt(2) / step
         # angular_spacing is unused — point bot has no heading.
         n_steps = steps_to_cover(spacing * math.sqrt(2), step)
+        arc_length = step * n_steps  # each step has magnitude `step` regardless of direction
         trajectories = []
         for dx, dy in [(-1,-1),(-1,0),(-1,1),(0,-1),(0,1),(1,-1),(1,0),(1,1)]:
             norm = math.hypot(dx, dy)
@@ -220,7 +224,7 @@ class PointBot(BotBase):
             traj: list[PointState] = [state]
             for _ in range(n_steps):
                 traj.append(traj[-1].translate(sx, sy))
-            trajectories.append(traj)
+            trajectories.append((traj, arc_length))
         return trajectories
 
     def handle_input(self, state: PointState, speed: float) -> PointState:
@@ -305,7 +309,7 @@ class DiffBot(BotBase):
 
         return states
 
-    def propagate(self, state: DiffState, spacing: float, angular_spacing: float, steering_granularity: int) -> list[list[DiffState]]:
+    def propagate(self, state: DiffState, spacing: float, angular_spacing: float, steering_granularity: int) -> list[tuple[list[DiffState], float]]:
         omegas = [
             self.OMEGA_MAX * i / steering_granularity
             for i in range(-steering_granularity, steering_granularity + 1)
@@ -323,14 +327,14 @@ class DiffBot(BotBase):
                 traj: list[DiffState] = [state]
                 for _ in range(n_steps):
                     traj.append(traj[-1].step(v, omega, cfg.DT))
-                trajectories.append(traj)
-        # rotate in place
+                trajectories.append((traj, abs(v) * n_steps * cfg.DT))
+        # rotate in place: no translation, arc_length = 0
         n_rot = steps_to_cover(angular_spacing, self.OMEGA_MAX * cfg.DT)
         for omega in (-self.OMEGA_MAX, self.OMEGA_MAX):
             traj = [state]
             for _ in range(n_rot):
                 traj.append(traj[-1].step(0.0, omega, cfg.DT))
-            trajectories.append(traj)
+            trajectories.append((traj, 0.0))
         return trajectories
 
     def handle_input(self, state: DiffState, speed: float) -> DiffState:
@@ -387,7 +391,7 @@ class CarBot(BotBase):
         path.append(goal)
         return path
 
-    def propagate(self, state: CarState, spacing: float, angular_spacing: float, steering_granularity: int) -> list[list[CarState]]:
+    def propagate(self, state: CarState, spacing: float, angular_spacing: float, steering_granularity: int) -> list[tuple[list[CarState], float]]:
         deltas = [
             self.MAX_STEER * i / steering_granularity
             for i in range(-steering_granularity, steering_granularity + 1)
@@ -405,7 +409,7 @@ class CarBot(BotBase):
                 traj: list[CarState] = [state]
                 for _ in range(n_steps):
                     traj.append(traj[-1].step(v, delta, self.wheelbase, cfg.DT))
-                trajectories.append(traj)
+                trajectories.append((traj, abs(v) * n_steps * cfg.DT))
         return trajectories
 
     def handle_input(self, state: CarState, speed: float) -> CarState:
@@ -497,7 +501,7 @@ class TrailerBot(BotBase):
 
     JACKKNIFE_LIMIT = math.pi / 2
 
-    def propagate(self, state: TrailerState, spacing: float, angular_spacing: float, steering_granularity: int) -> list[list[TrailerState]]:
+    def propagate(self, state: TrailerState, spacing: float, angular_spacing: float, steering_granularity: int) -> list[tuple[list[TrailerState], float]]:
         deltas = [
             self.MAX_STEER * i / steering_granularity
             for i in range(-steering_granularity, steering_granularity + 1)
@@ -524,7 +528,7 @@ class TrailerBot(BotBase):
                     traj.append(next_state)
 
                 if not jackknifed:
-                    trajectories.append(traj)
+                    trajectories.append((traj, abs(v) * n_steps * cfg.DT))
 
         return trajectories
 
