@@ -12,6 +12,7 @@ from bots import S, Bot, TrailerBot, trajectory_length
 from bots.state import PointTurnCapable
 from utils import center_distance
 from environment.obstacle import ObstacleEnvironment
+import config as cfg
 
 
 def validate_shortcut(
@@ -65,9 +66,6 @@ def smooth_path(
     return path
 
 
-DT = 1 / 30  # assumed simulation timestep for velocity calculations
-
-
 def isolate_rotation(path: list[S], start: int) -> int:
     """
     Starting at index `start`, scan forward to find the end of the
@@ -101,7 +99,7 @@ def resample_path(path: list[S], velocity: float = 3.0, angular_vel: float = mat
     if len(path) < 2:
         return list(path)
 
-    step_size = velocity * DT
+    step_size = velocity * cfg.DT
     resampled: list[S] = [path[0]]
     carry = 0.0
     i = 1
@@ -115,7 +113,7 @@ def resample_path(path: list[S], velocity: float = 3.0, angular_vel: float = mat
         if seg_len < 1e-12:
             if isinstance(prior, PointTurnCapable):
                 end = isolate_rotation(path, i - 1)
-                rot_states = prior.pure_rotation_linspace(path[end - 1], angular_vel * DT)
+                rot_states = prior.pure_rotation_linspace(path[end - 1], angular_vel * cfg.DT)
                 resampled.extend(rot_states[1:])
                 i = end
             else:

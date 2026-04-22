@@ -55,14 +55,14 @@ def populate_grid(grid_shape: tuple[int, int], probability: float, seed: int | N
     num_cells_expected = int(num_rows * num_cols * probability)
 
     while grid.sum() < num_cells_expected:
-        tet_type = int(rng.integers(0, len(tetrominoes) - 1, endpoint=True))
+        tet_type = int(rng.integers(0, len(tetrominoes)))
 
         shape = tetrominoes[tet_type]
 
-        shape = rotate(shape, rng.integers(0, 3, endpoint=True))
+        shape = rotate(shape, rng.integers(0, 4))
 
-        row = rng.integers(0, num_rows - 1, endpoint=True)
-        col = rng.integers(0, num_cols - 1, endpoint=True)
+        row = rng.integers(0, num_rows)
+        col = rng.integers(0, num_cols)
 
         for dr, dc in shape:
             r, c = row + dr, col + dc

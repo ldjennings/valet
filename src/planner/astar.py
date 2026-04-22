@@ -99,7 +99,7 @@ class SearchNode(Generic[S]):
     trajectory: list[S]  | None = field(compare=False, default=None)    # trajectory FROM parent TO this node
 
 
-def reconstruct_path(node: SearchNode[S], final_path: list[S] = []) -> list[S]:
+def reconstruct_path(node: SearchNode[S], final_path: list[S] | None = None) -> list[S]:
     arcs = []
     while node.parent is not None:
         arcs.append(node.trajectory)
@@ -113,7 +113,8 @@ def reconstruct_path(node: SearchNode[S], final_path: list[S] = []) -> list[S]:
 
     # if we have a final path afterwards (usually from one-shot closed-form trajectory),
     # add that onto the end
-    path.extend(final_path)
+    if final_path is not None:
+        path.extend(final_path)
 
     return path
 

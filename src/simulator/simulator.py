@@ -37,7 +37,7 @@ class Simulator(Generic[S]):
 
         pygame.init()
         renderer = Renderer(bot, goal, self.environment)
-        recorder = MP4Recorder() if record else NoOpRecorder()
+        recorder = MP4Recorder(fps= cfg.FPS) if record else NoOpRecorder()
         clock    = pygame.time.Clock()
 
         renderer.render(state)
@@ -72,7 +72,7 @@ class Simulator(Generic[S]):
             if path:
                 recorder.capture(renderer.screen)
 
-            clock.tick(30)
+            clock.tick(cfg.FPS)
 
         if path:
             recorder.save()

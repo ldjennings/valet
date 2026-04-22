@@ -34,8 +34,7 @@ import config as cfg
 # geometry is only translated for the rare STRtree check.
 FootprintEntry: TypeAlias = tuple[float, float, BaseGeometry]
 
-# Simulation timestep in seconds. All step() kinematics use this value.
-DT = 1 / 30
+
 
 
 STANDARD_SPEED = 5.0
@@ -213,7 +212,7 @@ class PointBot(BotBase):
             return [PointState(*p) for p in linspace_xy(start.position(), goal.position(), resolution)]
 
     def propagate(self, state: PointState, spacing: float, angular_spacing: float, steering_granularity: int) -> list[list[PointState]]:
-        step = self.SPEED * DT
+        step = self.SPEED * cfg.DT
         # For a point bot, every direction displaces equally (step per tick).
         # n_steps so that diagonal displacement per axis >= spacing:
         # diagonal per-axis = n * step / sqrt(2) >= spacing → n >= spacing * sqrt(2) / step
@@ -318,23 +317,23 @@ class DiffBot(BotBase):
         trajectories = []
         for v in (self.SPEED, -self.SPEED):
             for omega in omegas:
-                n_xy = _n_steps_for_control(spacing, v, omega, DT)
+                n_xy = _n_steps_for_control(spacing, v, omega, cfg.DT)
                 # for turning primitives, ensure heading changes by at least one angular bin
                 if abs(omega) > 1e-9:
-                    n_heading = steps_to_cover(angular_spacing, abs(omega) * DT)
+                    n_heading = steps_to_cover(angular_spacing, abs(omega) * cfg.DT)
                     n_steps = max(n_xy, n_heading)
                 else:
                     n_steps = n_xy
                 traj: list[DiffState] = [state]
                 for _ in range(n_steps):
-                    traj.append(traj[-1].step(v, omega, DT))
+                    traj.append(traj[-1].step(v, omega, cfg.DT))
                 trajectories.append(traj)
         # rotate in place
-        n_rot = steps_to_cover(angular_spacing, self.OMEGA_MAX * DT)
+        n_rot = steps_to_cover(angular_spacing, self.OMEGA_MAX * cfg.DT)
         for omega in (-self.OMEGA_MAX, self.OMEGA_MAX):
             traj = [state]
             for _ in range(n_rot):
-                traj.append(traj[-1].step(0.0, omega, DT))
+                traj.append(traj[-1].step(0.0, omega, cfg.DT))
             trajectories.append(traj)
         return trajectories
 
@@ -350,7 +349,7 @@ class DiffBot(BotBase):
             omega = -speed
         elif keys[pygame.K_RIGHT] and not keys[pygame.K_LEFT]:
             omega = speed
-        return state.step(v, omega, DT)
+        return state.step(v, omega, cfg.DT)
 
     def make_state(self, x: float, y: float, h: float = 0, t:float = 0) -> DiffState:
         return DiffState(x, y, h)
@@ -400,15 +399,15 @@ class CarBot(BotBase):
         for v in (self.SPEED, -self.SPEED):
             for delta in deltas:
                 omega = v * math.tan(delta) / self.wheelbase if delta != 0 else 0.0
-                n_xy = _n_steps_for_control(spacing, v, omega, DT)
+                n_xy = _n_steps_for_control(spacing, v, omega, cfg.DT)
                 if abs(omega) > 1e-9:
-                    n_heading = steps_to_cover(angular_spacing, abs(omega) * DT)
+                    n_heading = steps_to_cover(angular_spacing, abs(omega) * cfg.DT)
                     n_steps = max(n_xy, n_heading)
                 else:
                     n_steps = n_xy
                 traj: list[CarState] = [state]
                 for _ in range(n_steps):
-                    traj.append(traj[-1].step(v, delta, self.wheelbase, DT))
+                    traj.append(traj[-1].step(v, delta, self.wheelbase, cfg.DT))
                 trajectories.append(traj)
         return trajectories
 
@@ -426,7 +425,7 @@ class CarBot(BotBase):
         elif keys[pygame.K_RIGHT] and not keys[pygame.K_LEFT]:
             delta = self.MAX_STEER
 
-        return state.step(v, delta, self.wheelbase, DT)
+        return state.step(v, delta, self.wheelbase, cfg.DT)
 
     def make_state(self, x: float, y: float, h: float = 0, t:float = 0) -> CarState:
         return CarState(x, y, h)
@@ -511,9 +510,9 @@ class TrailerBot(BotBase):
         for v in (self.SPEED, -self.SPEED):
             for delta in deltas:
                 omega = v * math.tan(delta) / self.wheelbase if delta != 0 else 0.0
-                n_xy = _n_steps_for_control(spacing, v, omega, DT)
+                n_xy = _n_steps_for_control(spacing, v, omega, cfg.DT)
                 if abs(omega) > 1e-9:
-                    n_heading = steps_to_cover(angular_spacing, abs(omega) * DT)
+                    n_heading = steps_to_cover(angular_spacing, abs(omega) * cfg.DT)
                     n_steps = max(n_xy, n_heading)
                 else:
                     n_steps = n_xy
@@ -522,7 +521,7 @@ class TrailerBot(BotBase):
 
                 jackknifed = False
                 for _ in range(n_steps):
-                    next_state = traj[-1].step(v, delta, self.wheelbase, self.hitch_distance, DT)
+                    next_state = traj[-1].step(v, delta, self.wheelbase, self.hitch_distance, cfg.DT)
                     if angle_distance(next_state.heading_rad, next_state.trailer_heading_rad) > self.JACKKNIFE_LIMIT:
                         jackknifed = True
                         break
@@ -547,7 +546,7 @@ class TrailerBot(BotBase):
         elif keys[pygame.K_RIGHT] and not keys[pygame.K_LEFT]:
             delta = self.MAX_STEER
 
-        return state.step(v, delta, self.wheelbase, self.hitch_distance, DT)
+        return state.step(v, delta, self.wheelbase, self.hitch_distance, cfg.DT)
 
     def make_state(self, x: float, y: float, h: float = 0, t:float = 0) -> TrailerState:
         return TrailerState(x, y, h, t)

@@ -6,7 +6,7 @@ from shapely.affinity import translate
 from shapely.geometry import box
 from shapely.geometry.base import BaseGeometry
 
-from typing import TypeAlias
+from typing import Final, TypeAlias
 
 FootprintEntry: TypeAlias = tuple[float, float, BaseGeometry]
 
@@ -65,7 +65,7 @@ class ObstacleEnvironment:
         rows, cols = grid_shape
 
         self.enclosure_geom = box(0, 0, cols * cell_size_meters, rows * cell_size_meters)
-        self._bounds        =    (0, 0, cols * cell_size_meters, rows * cell_size_meters)
+        self._bounds: Final  = (0, 0, cols * cell_size_meters, rows * cell_size_meters)
 
 
 

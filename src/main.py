@@ -45,25 +45,37 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+# (start_col, start_row) from top-left; (col_offset, row_offset) from bottom-right
+_SCENARIOS: dict[str, tuple[tuple[float, float], tuple[float, float]]] = {
+    "point":   ((0,   0), (3.5,   1)),
+    "diff":    ((0,   0), (3.5,   1)),
+    "car":     ((0.5, 0), (3.575, 1.35)),
+    "trailer": ((2,   0), (4,     1)),
+}
+
+
+def _make_scenario(bot_type: str, seed: int | None):
+    start_col, start_row     = _SCENARIOS[bot_type][0]
+    col_offset, row_offset   = _SCENARIOS[bot_type][1]
+
+    startxy = grid_to_coords(start_col, start_row)
+    goalxy  = grid_to_coords(cfg.NUM_COLS - col_offset, cfg.NUM_ROWS - row_offset)
+
+    bundle      = make_bot(bot_type, startxy, goalxy)
+    environment = ObstacleEnvironment(
+        (cfg.NUM_ROWS, cfg.NUM_COLS), cfg.CELLS_TO_METERS,
+        proportion_filled=0.1,
+        trailer=(bot_type == "trailer"),
+        seed=seed,
+    )
+    return bundle, environment
+
+
 def main() -> None:
     args = parse_args()
 
-    trailer = (args.bot_type == "trailer")
-
-    start_goal = {
-        "point":   ((0, 0),     (-3.5, -1)),
-        "diff":    ((0, 0),     (-3.5, -1)),
-        "car":     ((0.5, 0),   (-3.575, -1.35)),
-        "trailer": ((2, 0),     (-4, -1)),
-    }
-
-    (sr, sc), (gr, gc) = start_goal[args.bot_type]
-    startxy = grid_to_coords(sr, sc)
-    goalxy  = grid_to_coords(cfg.NUM_COLS + gr, cfg.NUM_ROWS + gc)
-
-    bundle      = make_bot(args.bot_type, startxy, goalxy)
-    environment = ObstacleEnvironment((cfg.NUM_ROWS, cfg.NUM_COLS), cfg.CELLS_TO_METERS, 0.1, trailer, seed=args.seed)
-    config      = HybridConfig(spacing=1, angular_spacing=math.pi / 3, max_iterations=15000, fine_collision=False)
+    bundle, environment = _make_scenario(args.bot_type, args.seed)
+    config = HybridConfig(spacing=1, angular_spacing=math.pi / 3, max_iterations=15000, fine_collision=False)
 
     Simulator(bundle, environment, config).run(args.manual, args.record)
 
