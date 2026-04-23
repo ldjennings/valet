@@ -1,5 +1,9 @@
+#import "@preview/retrofit:0.1.2": backrefs
 
-
+// #show: backrefs.with(
+//   format: links => text(gray)[(Cited on p. #links.join(", ", last: " and "))],
+//   read: path => read(path),
+// )
 
 #let appendix(
   title: "Appendices",

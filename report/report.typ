@@ -1,5 +1,7 @@
-#show link: underline
 #import "template.typ"
+
+#show link: underline
+
 
 #set text(font: "New Computer Modern", size: 11pt)
 #set math.equation(numbering: "(1)")
@@ -23,23 +25,77 @@
 
 
 === Introduction
-For this assignment, I simulated the kinematics of the robot, car, and trailer using a state lattice, and implemented a collision checker using #link("https://shapely.readthedocs.io/en/stable/")[shapely], a python library used to model and manipulate geometry.
+This assignment implements a motion planning simulator for four vehicle types of increasing kinematic complexity: a holonomic point robot, a differential drive, an Ackermann car, and a car towing a trailer. Each vehicle navigates a randomly generated obstacle field from a fixed start pose to a goal pose.
+
+The planner uses a python implementation of the Hybrid A\* search algorithm, a variant of A\* that searches over a continuous $(x, y, theta)$ state space while using a discretised grid for duplicate detection.
+
+Collision detection is built on #link("https://shapely.readthedocs.io/en/stable/")[shapely] polygon geometry with a broad-phase occupancy-grid filter and a pre-rotated heading cache to keep query cost low. After successfully finding a raw path to the goal pose, it is post-processed by probabilistic shortcutting and then resampled to a uniform velocity for smooth playback.
 
 
 ==== Usage
-Dependencies are managed through a `pyproject.toml` file. Create a virtual environment, then run `pip install .`.
 
-To run the main simulator, now enter the command `runsim`, as an entry point was created by the config file. This is basic, as it only has the collision checking implemented, but you can maneuver and rotate it with the arrow and WASD keys respectively.
+Dependencies are managed via `pyproject.toml`. A `Makefile` is provided for convenience:
 
-To specify the configuration to collision check, use `--work` to specify   `diff`, `car`, or `trailer`.
+```
+make install   # create .venv and install all dependencies
+make venv      # create .venv if needed, then print the activation command
+make clean     # remove .venv, caches, build artifacts, and any recorded mp4s
+```
+
+After activating the environment, the simulator is launched with the `runsim` entry point:
+
+```
+runsim [bot_type] [options]
+```
+
+`bot_type` is one of `point`, `diff`, `car`, or `trailer` (default: `diff`). Available options:
+
+```
+-m / --manual    drive the bot manually with arrow keys instead of planning
+-r / --record    save the simulation to recording.mp4
+-s / --seed N    fix the RNG seed for a reproducible obstacle layout
+```
+
+For example, to run the trailer bot with a fixed seed:
+```
+runsim trailer -s 42
+```
+
+When no seed is provided, a random one is chosen and printed to the terminal at startup, allowing any run to be reproduced exactly with `-s`. The terminal also prints planner progress during the search — node expansion count, open set size, current cost, and position — as well as a summary on completion including the number of expansions, shortcuts applied during smoothing, and final path length after resampling.
 
 
+==== Dependencies
+
+The project uses the following notable external libraries:
+
+- *#link("https://www.pygame.org/")[Pygame]* — provides the real-time 2-D rendering window, keyboard event handling for manual drive mode, and the simulation loop.
+
+- *#link("https://shapely.readthedocs.io/en/stable/")[Shapely]* — computational geometry library used to represent robot footprints as polygons and query them against obstacle geometry via an STRtree spatial index.
+
+- *#link("https://imageio.readthedocs.io/")[imageio] / imageio-ffmpeg* — used together to encode simulation recordings to MP4 when the `--record` flag is passed; imageio-ffmpeg supplies the FFmpeg backend.
+
+- *reeds_shepp (pyReedsShepp)* @liespace_pyreedsshepp — Python bindings to a C implementation of Reeds-Shepp path length and curve computations. The original library #cite(<ghliu_pyreedsshepp>) targets an older Python version; a personal fork (stored as a git submodule at `deps/pyReedsShepp`) was created to update the Cython build configuration for compatibility with the current Python version.
+
+=== Design Goals
+
+Development was incremental: start with a working holonomic point robot (not required, but useful for isolating planner bugs), then add each vehicle type in order of complexity. Shapely was used for collision detection from the start as a correct-if-slow baseline, with optimisation deferred until the planner was working. Performance work was largely driven by profiling with `cProfile` and `snakeviz`.
+// cool icicle plot
+
+The code was also an experiment with modern Python's type system — `typing.Protocol` and generics were used to keep vehicle types interchangeable without inheritance, inspired by Rust traits. Interesting in practice, though probably not worth the overhead in the future.
+
+The trailer was the most annoying part. There isn't closed-form path for an arbitrary truck-trailer start/goal the way Reeds-Shepp works for a car, so a Hybrid A\* approach with Euler-integrated trailer kinematics was used instead.
+
+
+
+#pagebreak()
 === Approach
 
-I chose to represent the state of the world using a numpy array, with different states (empty, wall, goal, hero, enemy) represented by different integers. I chose numpy arrays to store the grid state because it allows for fast access and easy copying of the grid for updates, while also being very simple.
 
-The hero uses A\* with a Manhattan distance heuristic to decide its next move, with that being recalculated with every step taken. Using D\* would be more appropriate due to the changing environment, but I used A\* because it was simpler to implement.
+=== Obstacle Environment
 
+// TODO: add a screenshot of the environment here
+
+The environment is a fixed-size 2D grid with randomly placed axis-aligned obstacles, a fixed start and goal at opposite corners, and a printable RNG seed for reproducibility. Obstacles are stored as both a NumPy boolean grid for fast broad-phase rejection and a Shapely `STRtree` for exact intersection tests.
 
 
 === Collision Detection
@@ -47,130 +103,56 @@ The hero uses A\* with a Manhattan distance heuristic to decide its next move, w
 // checks with a vehicle and obstacle region. Submit these diagrams individually, but also include
 // them in your report.
 
-For collision detection, I initially chose to use #link("https://shapely.readthedocs.io/en/stable/")[shapely], a third-party python library used to model and manipulate geometry. The main reason for doing so was to develop the rest of the program without needing to take the time to figure out all the details of collision detection.
+The collision checker was designed to handle two geometry types: rotated rectangular footprints (for the robot body, truck, and trailer) and a line segment (the hitch bar connecting truck to trailer). Obstacles are axis-aligned grid cells, stored as both a numpy boolean array for fast grid lookups and a shapely `STRtree` of `box` polygons for exact intersection tests.
 
-However, this approach soon ran into performance issues. Shapely is designed to be performant, but much of that performance lies in batching calls to the underlying C/C++ library. My approach, calling intersection on individual geometries, suffered from the overhead involved in repeatedly crossing that barrier.
+#link("https://shapely.readthedocs.io/en/stable/")[shapely] is designed for general topological geometry analysis and is not inherently optimised for repeated per-frame queries against a fixed obstacle set. Naively calling intersects on individual translated geometries at every state check proved too slow for the planner's inner loop. Three optimisations were applied to address this.
+
+==== Heading cache.
+Rotating or translating a Shapely geometry is expensive. To exchange strict accuracy for performance, each base shape is pre-rotated at 72 evenly-spaced headings (every $5 degree$) at construction time. Per-state footprint queries look up the nearest pre-rotated shape and record only the $(x, y)$ offset, deferring translation until an exact check is actually needed.
 
 
-// Additionally, shapely's features
+==== State validation.
+The state validator applies checks in order of increasing cost, exiting as soon as any check fails.
 
-//  overhead due to being a fully featured geometry library. It's designed to deal with general topology geometry analysis, while this assignment is limited to collisions between rectangles, either axis aligned or oriented.
-
-// Shapely is designed around being a python interface for the #link("https://libgeos.org/")[C/C++ GEOS library]
-
-To deal with this, I focused on three different approaches: caching approximate rotations of each geometry, reducing the number of states that need to be checked, and eliminating states that can be easily validated.
-
-==== State validator
 #let validator = code-block()[
-```
-function IS_VALID_STATE(geometries):
-    for each geometry in geometries:
-        if geometry is a line segment:
-            if any endpoint lies outside the environment boundary:
-                return false
-            if the segment intersects an obstacle:
-                return false
-        else: // Geometry is a rotated rectangle
-            compute translated axis-aligned bounding box
-            if bounding box lies outside the environment boundary:
-                return false
-            if no obstacle can possibly overlap the bounding box:
-                continue  // broad-phase rejection
-            compute translated geometry
-            if geometry intersects any obstacle:
-                return false
-    return true
-```
+  ```
+  function IS_VALID_STATE(geometries):
+      for each geometry in geometries:
+          if geometry is a line segment:
+              if any endpoint lies outside the environment boundary:
+                  return false
+              if the segment intersects an obstacle:
+                  return false
+          else: // Geometry is a rotated rectangle
+              compute translated axis-aligned bounding box
+              if bounding box lies outside the environment boundary:
+                  return false
+              if no obstacle can possibly overlap the bounding box:
+                  continue  // broad-phase rejection
+              compute translated geometry
+              if geometry intersects any obstacle:
+                  return false
+      return true
+  ```
 ]
 
 #figure(validator, caption: "Pseudocode describing state validation process.")
 
-The state validator function accepts a list o representing the current state
+For rectangular footprints: the translated axis-aligned bounding box (AABB) is checked against the environment boundary first. If it lies outside, the state is immediately rejected without touching any geometry. If it lies inside, the AABB is mapped to grid cell indices and the corresponding subgrid slice is checked for any occupied cel. This eliminates the majority of valid states at negligible cost. The geometry is only translated and tested exactly against the `STRTree` if the broad phase reports a possible collision.
 
-The general approach for the state validator function focused around filtering the rectangle checks with cheap checks before calling expensive shapely functions.
+===== Line segment handling.
+The trailer's hitch bar cannot be represented as a box, so it is stored as raw endpoints rather than a Shapely geometry. Containment is checked by testing both endpoints against the boundary. Obstacle intersection uses Bresenham's line algorithm against an occupancy grid, stepping cell-by-cell along the segment and returning on the first occupied cell.
 
-The state validator, basically
+==== Path-level validation.
+During planning, entire primitive trajectories must be validated, not just individual states. A two-phase approach is used: first, the last state and every 4th intermediate state are checked using the approximate (cached, untranslated) footprints. Most invalid primitives are caught here. If that passes, and fine collision checks are enabled, the remaining states are checked with exact footprints.
 
-I could likely replace this with an implementation of the Separating Axis Theorem, but I didn't believe it was worth the time to do so. According to #link("https://docs.python.org/3/library/profile.html")[Cprofile], calls to the STRtree function only take up 5% of the hybrid A\* runtime #footnote[Ran with a seed of 11, grid spacing of 1, angular spacing of $frac(pi, 3)$], so I decided to focus on improving other parts of the program.
-
-
-
-
+According to cProfile, STRtree intersection calls account for approximately 5% of hybrid A\* runtime after these optimisations, with the dominant cost shifted to state expansion and heuristic evaluation.
 
 
 
 
 
-As an example, the code for defining the trailer geometry can be seen below. It constructs two rectangles using the constants described in the assignment and the current state variables:
 
-```python
-def truck_trailer_geom(x, y, theta, phi):
-    """
-    Returns a Shapely geometry (truck + trailer + connection)
-    given truck rear-axle center (x, y), truck heading theta, and trailer angle phi.
-    The trailer is attached directly at the truck's rear axle.
-    """
-    # shortening the constants,
-    TRUCK_LEN = cfg.TRUCK_LENGTH_METERS
-    TRUCK_W = cfg.TRUCK_WIDTH_METERS
-    WHEELBASE = cfg.TRUCK_WHEELBASE_METERS
-    TRAILER_LEN = cfg.TRAILER_LENGTH_METERS
-    TRAILER_W = cfg.TRAILER_WIDTH_METERS
-    D1 = cfg.TRUCK_HITCH_TO_TRAILER_AXLE * 3
-
-    # Trailer axle
-    x_t = x + D1 * math.cos(math.radians(theta + phi))
-    y_t = y + D1 * math.sin(math.radians(theta + phi))
-
-    # truck rectangle with the rear axle at 0,0
-    truck_rect = Polygon([
-        [-WHEELBASE, -TRUCK_W/2],
-        [TRUCK_LEN - WHEELBASE, -TRUCK_W/2],
-        [TRUCK_LEN - WHEELBASE,  TRUCK_W/2],
-        [-WHEELBASE,  TRUCK_W/2]
-    ])
-    truck_world = rotate(truck_rect, theta, origin=(0, 0))
-    truck_world = translate(truck_world, xoff=x, yoff=y)
-
-    # trailer rectangle
-    trailer_rect = Polygon([
-        [-TRAILER_LEN/2, -TRAILER_W/2],
-        [ TRAILER_LEN/2, -TRAILER_W/2],
-        [ TRAILER_LEN/2,  TRAILER_W/2],
-        [-TRAILER_LEN/2,  TRAILER_W/2]
-    ])
-    trailer_world = rotate(trailer_rect, theta + phi, origin=(0, 0))
-    trailer_world = translate(trailer_world, xoff=x_t, yoff=y_t)
-
-    # line between them
-    connection = LineString([(x, y), (x_t, y_t)])
-
-    return unary_union([truck_world, trailer_world, connection])
-```
-
-
-
-#figure(
-    grid(
-        columns: 2,
-        gutter: 2mm,
-        box(
-            stroke: 2pt + black,
-            radius: 5pt,
-            inset: 5pt,
-            image("media/trailer_clear.png"),
-        ),
-        box(
-            stroke: 2pt + black,
-            radius: 5pt,
-            inset: 5pt,
-            image("media/trailer_collision.png"),
-        )
-    ),
-    caption: "Example of collision detection on trailer. The connection length has been exaggerated."
-)
-
-An example of the collision detection can be seen above with the truck and trailer. When it has collided with the obstacles in the environment, the vehicle turns red, but is normally green when not colliding with anything.. As can be seen in the diagram, the line segment is also included in the collision check.
 
 === Planner Implementation
 ==== Hybrid A\*
@@ -251,20 +233,26 @@ Smoothing applies probabilistic shortcutting: two random indices are chosen, a d
 
 Resampling converts the variable-density path into uniform arc-length samples so the animation plays back at a constant velocity. Pure-rotation segments (zero XY displacement) are detected separately and resampled at a fixed angular rate. This step is done by the function `resample_path`.
 
-=== Results
+=== Results <results>
 
-==== Challenges
+// TODO: screenshots of each vehicle type navigating (point, diff, car, trailer)
 
-I had a lot of difficulty with getting a state lattice set up. This mainly revolved around properly simultating the kinematics of the system and making sure that the state lattice was properly aligned throughout the process. I was able to get a very rough version working, but it failed to regularly tile the state space, as I was just propogating out from headings rather than actually going to regular nodes that could easily be searched using A\*. It could get within a very rough radius, but not close enough to be consistent:
+The planner works well across all four vehicle types. The trailer in particular produces some satisfying paths — watching it navigate tight spaces while keeping the trailer heading under control is a good demonstration that the coupled kinematics are being handled correctly. Performance ended up in a reasonable place after profiling, making iteration much faster than it was early on. The codebase also ended up in a good state structurally; having a clean interface between vehicle types made it easy to experiment with planner parameters and add features without things breaking unexpectedly.
 
-#figure(
-    image("media/test_lattice.png"),
-    caption: "results from experimenting with rudimentary state latticing."
-)
+==== Areas for Improvement
 
-I also tried to get a handle on Reed-Shepp or Dubin paths, but never got far enough with those.
+- *Obstacle-aware heuristic.* The Reeds-Shepp heuristic ignores obstacles, which can cause the planner to underestimate costs in cluttered environments. Augmenting it with a precomputed 2D Dijkstra cost-to-go map from the goal would give tighter estimates and likely reduce node expansions.
+
+- *State representation boundary.* Throughout the planner, full typed state objects are used rather than raw float arrays or tuples. This made the logic clean and easy to reason about, but there is a real performance cost — NumPy operations on raw arrays would be substantially faster than constructing and passing around dataclass instances in the planner's inner loop. This was a conscious tradeoff in favour of correctness and clarity over speed.
+
+- *Dataclass performance.* Switching from standard Python dataclasses to a library like `msgspec` could reduce the overhead of creating large numbers of short-lived state objects during search.
+
+- *Full SAT-based collision.* Shapely is still used for the narrow-phase intersection checks. Replacing it entirely with raw NumPy checks using the Separating Axis Theorem would remove the last external geometry dependency and likely be faster. The current version is good enough, but it's a loose end.
+
+- *Planner visualisation.* It would be nice to watch Hybrid A\* progress in real time — drawing expanded nodes, the open set, and the current best path as the search runs. The current sim only shows the final result. This wasn't a priority, but it would make debugging and tuning much more intuitive.
 
 #pagebreak()
+
 
 #bibliography("refs.bib", style: "ieee")
 
