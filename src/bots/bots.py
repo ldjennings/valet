@@ -15,9 +15,10 @@ from bots.state import (
     PointState,
     DiffState,
     CarState,
+    Rotateable,
     TrailerState,
 )
-from utils import angle_difference, direction, center_distance, angle_distance, linspace_xy, rs_path_sample, steps_to_cover, arc_trajectory, Position
+from utils import angle_difference, direction, center_distance, angle_distance, linspace_xy, rs_path_length, rs_path_sample, steps_to_cover, arc_trajectory, Position
 from bots.geometry import (
     point_geom, place, truck_trailer_approximate, truck_trailer_geom,
     make_point_base, make_centered_rect_base, make_axle_rect_base,
@@ -143,13 +144,17 @@ class BotBase:
     goal_heading_tol: float
     trailer_heading_tol: float
     SPEED = STANDARD_SPEED
+    turning_radius: float
 
 
     def is_terminal(self, state: S, goal: S) -> bool:
         return center_distance(state.position(), goal.position()) < self.TERMINAL_RADIUS
 
     def heuristic(self, state: S, goal: S) -> float:
-        return center_distance(state.position(), goal.position())
+        if isinstance(state, Rotateable) and isinstance(goal, Rotateable):
+            return rs_path_length(state, goal, self.turning_radius)
+        else:
+            return center_distance(state.position(), goal.position())
 
     def at_goal(self, state: S, goal: S) -> bool:
         if center_distance(state.position(), goal.position()) >= self.goal_radius_tol:
@@ -177,6 +182,7 @@ class PointBot(BotBase):
     """Holonomic point robot. Can move in any direction; no heading or turning constraints."""
 
     TERMINAL_RADIUS = 10.0
+
 
     def __init__(self, goal_radius_tol: float = cfg.GOAL_RADIUS_TOLERANCE):
         self.goal_radius_tol = goal_radius_tol
@@ -243,6 +249,7 @@ class DiffBot(BotBase):
 
     OMEGA_MAX       = math.pi / 2      # rad/s
     TERMINAL_RADIUS = 2.0
+    turning_radius = cfg.ROBOT_WIDTH_METERS # sample thing for the distance calcs
 
     def __init__(
         self,
