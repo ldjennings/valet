@@ -1,24 +1,26 @@
 [project]
- name = "Valet_Assignment" 
+ name = "Valet_Assignment"
  version = "0.1.0"
  authors = [
     {name = "Liam Jennings"},
  ]
  dependencies = [
-    "matplotlib~=3.10",
-    "numpy~=2.3.3",
-    "scipy~=1.16.2",
-    "pygame~=2.6.1",
-    "shapely~=2.1.2",
-    "cython"
+   "numpy~=2.3.3",
+   "pygame~=2.6.1",
+   "shapely~=2.1.2",
+   "cython~=3.2",
+   "imageio~=2.37",
+   "imageio-ffmpeg~=0.6",
+   "reeds_shepp @ file:deps/pyReedsShepp",
+
 ]
- 
+
 
 [project.scripts]
 runsim="main:main"
 
-[tool.mypy]
-python_executable = ".venv/bin/python"
+# [tool.mypy]
+# python_executable = ".venv/bin/python"
 
 [tool.pyright]
 extraPaths = ["deps/pyReedsShepp"]

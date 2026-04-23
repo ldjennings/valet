@@ -1,24 +1,9 @@
-#import "template.typ"
-
-#show link: underline
+#import "template.typ": code-block, appendix, template
 
 
-#set text(font: "New Computer Modern", size: 11pt)
-#set math.equation(numbering: "(1)")
 
-#set par(
-  justify: true,
-  leading: 0.65em,
-)
+#show: template
 
-
-#let code-block(body) = rect(
-  fill: luma(245), // light grey background
-  stroke: 0.5pt + luma(200), // subtle border
-  radius: 4pt, // rounded corners
-  inset: 8pt, // padding inside the box
-  body,
-)
 
 = Valet Homework Assignment
 == RBE 550 - Liam Jennings
@@ -74,7 +59,7 @@ The project uses the following notable external libraries:
 
 - *#link("https://imageio.readthedocs.io/")[imageio] / imageio-ffmpeg* — used together to encode simulation recordings to MP4 when the `--record` flag is passed; imageio-ffmpeg supplies the FFmpeg backend.
 
-- *reeds_shepp (pyReedsShepp)* @liespace_pyreedsshepp — Python bindings to a C implementation of Reeds-Shepp path length and curve computations. The original library #cite(<ghliu_pyreedsshepp>) targets an older Python version; a personal fork (stored as a git submodule at `deps/pyReedsShepp`) was created to update the Cython build configuration for compatibility with the current Python version.
+- *reeds_shepp (pyReedsShepp)* @liespace_pyreedsshepp — Python bindings to a C implementation of Reeds-Shepp path length and curve computations. The original library #cite(<ghliu_pyreedsshepp>) targets an older Python version; a personal fork (stored as a git submodule at `deps/pyReedsShepp`) was created to update the Cython build configuration for compatibility with the Python version used for the project.
 
 === Design Goals
 
@@ -256,7 +241,7 @@ The planner works well across all four vehicle types. The trailer in particular 
 
 #bibliography("refs.bib", style: "ieee")
 
-#template.appendix()[
+#appendix()[
     = Derivation of @eq:arc_trajectory_formula <arc_derivation>
 
     Both the differential drive and Ackermann kinematics can be simplified to the unicycle kinematic model @lav2006[Section 13.1.2.3]:
