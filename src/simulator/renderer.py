@@ -82,7 +82,7 @@ def draw_visited(surface: pygame.Surface, visited_xy: list[tuple[float, float]],
 
 def draw_grid(obstacles: ObstacleEnvironment, screen: pygame.Surface) -> None:
     """Draw the environment boundary and all obstacle cells."""
-    draw_shape(screen, obstacles.enclosure_geom, cfg.WHITE, True, cfg.RED)
+    draw_shape(screen, obstacles.enclosure_geom, cfg.WHITE, True, cfg.GRAY)
     for g in obstacles.obstacles.geometries:
         draw_shape(screen, g, cfg.BLACK, True, cfg.GRAY)
 

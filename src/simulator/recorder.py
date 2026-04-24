@@ -26,6 +26,21 @@ class Recorder(Protocol):
     def save(self) -> None: ...
 
 
+def save_screenshot(surface: pygame.Surface, directory: str = ".") -> str:
+    """Save the current surface as a PNG with a unique timestamped name.
+
+    Returns the path of the saved file.
+    """
+    import os
+    from datetime import datetime
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    path = os.path.join(directory, f"screenshot_{timestamp}.png")
+    image_data = extract_image_data(surface)
+    imageio.imwrite(path, image_data)
+    print(f"Screenshot saved: {path}")
+    return path
+
+
 class NoOpRecorder:
     """Drop-in recorder used when recording is disabled; all calls are no-ops."""
 

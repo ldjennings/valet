@@ -14,7 +14,7 @@ from bots import S
 from environment import ObstacleEnvironment
 from planner import hybrid_astar, HybridConfig
 from simulator.renderer import Renderer
-from simulator.recorder import MP4Recorder, NoOpRecorder
+from simulator.recorder import MP4Recorder, NoOpRecorder, save_screenshot
 from simulator.Bundle import BotBundle
 
 
@@ -65,6 +65,11 @@ class Simulator(Generic[S]):
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
+                elif event.type == pygame.KEYDOWN and event.key == pygame.K_s:
+                    _, _, env_w, env_h = self.environment.enclosure_geom.bounds
+                    w = min(int(env_w * cfg.METERS_TO_PIXELS) + 1, renderer.next_frame.get_width())
+                    h = min(int(env_h * cfg.METERS_TO_PIXELS) + 1, renderer.next_frame.get_height())
+                    save_screenshot(renderer.next_frame.subsurface((0, 0, w, h)))
 
             if manual:
                 next_state = bot.handle_input(state, 3.0)

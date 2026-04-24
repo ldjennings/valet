@@ -9,17 +9,13 @@ PROFILES = {
 
 # (display name, substring to match against "file:lineno(funcname)" key)
 FUNCTIONS = [
-    ("rotate",               "affinity.py:126(rotate)"),
-    ("translate",            "affinity.py:247(translate)"),
-    ("_affine_coords",       "affinity.py:72(_affine_coords)"),
-    ("strtree.query",        "strtree.py:109(query)"),
+    ("rotate",                  "affinity.py:126(rotate)"),
+    ("translate",               "affinity.py:247(translate)"),
+    ("_affine_coords",          "affinity.py:72(_affine_coords)"),
     ("_has_possible_collision", "obstacle.py:102(_has_possible_collision)"),
-    ("_within_bounds",       "obstacle.py:122(_within_bounds)"),
-    ("is_valid_state",       "obstacle.py:171(is_valid_state)"),
-    ("lookup_cached",        "geometry.py"),
-    ("intersects_any",       "obstacle.py:24(intersects_any)"),
-    ("validate_path",        "astar.py:152(validate_path)"),
-    ("propagate",            "bots.py:392(propagate)"),
+    ("intersects_any",          "obstacle.py:24(intersects_any)"),
+    ("is_valid_state",          "obstacle.py:171(is_valid_state)"),
+    ("propagate",               "bots.py:392(propagate)"),
 ]
 
 
@@ -44,33 +40,38 @@ labels   = [f[0] for f in FUNCTIONS]
 x        = np.arange(len(labels))
 width    = 0.35
 
-fig, axes = plt.subplots(2, 1, figsize=(14, 10))
-fig.suptitle("Optimized vs Unoptimized — call counts and exclusive time", fontsize=13)
+FONT_TITLE  = 16
+FONT_LABEL  = 14
+FONT_TICK   = 13
+FONT_LEGEND = 13
+
+fig, axes = plt.subplots(2, 1, figsize=(14, 11))
 
 total_un  = data["unoptimized"][2]
 total_opt = data["optimized"][2]
 
-for ax, metric, ylabel, idx in [
-    (axes[0], 0, "Call count",        0),
-    (axes[1], 1, "Exclusive time (s)", 1),
+for ax, metric, ylabel in [
+    (axes[0], 0, "Call count"),
+    (axes[1], 1, "Exclusive time (s)"),
 ]:
     vals_un  = [data["unoptimized"][metric].get(l, 0) for l in labels]
     vals_opt = [data["optimized"][metric].get(l, 0)   for l in labels]
 
-    bars_un  = ax.bar(x - width/2, vals_un,  width, label="unoptimized", color="#d62728")
-    bars_opt = ax.bar(x + width/2, vals_opt, width, label="optimized",   color="#2ca02c")
+    ax.bar(x - width/2, vals_un,  width, label="Unoptimized", color="#d62728")
+    ax.bar(x + width/2, vals_opt, width, label="Optimized",   color="#2ca02c")
 
     ax.set_xticks(x)
-    ax.set_xticklabels(labels, rotation=30, ha="right", fontsize=9)
-    ax.set_ylabel(ylabel)
-    ax.legend()
+    ax.set_xticklabels(labels, rotation=25, ha="right", fontsize=FONT_TICK)
+    ax.set_ylabel(ylabel, fontsize=FONT_LABEL)
+    ax.legend(fontsize=FONT_LEGEND)
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:,.0f}"))
+    ax.tick_params(axis="y", labelsize=FONT_TICK)
 
 fig.suptitle(
-    f"Optimized vs Unoptimized — call counts and exclusive time\n"
-    f"Total runtime: unoptimized {total_un:.2f}s  |  optimized {total_opt:.2f}s  "
-    f"(speedup {total_un/total_opt:.2f}×)",
-    fontsize=12,
+    f"Collision Checker Optimization — Call Counts and Exclusive Time\n"
+    f"Total runtime:  unoptimized {total_un:.2f} s  |  optimized {total_opt:.2f} s  "
+    f"({total_un/total_opt:.2f}× speedup)",
+    fontsize=FONT_TITLE,
 )
 plt.tight_layout()
 plt.savefig("profile_comparison.png", dpi=150)

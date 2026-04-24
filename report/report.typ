@@ -78,9 +78,12 @@ The trailer was the most annoying part. There isn't closed-form path for an arbi
 
 === Obstacle Environment
 
-// TODO: add a screenshot of the environment here
+#figure(
+    image("media/photos/obstacle_env.png",width: 80%),
+    caption:"Obstacle Environment using the car"
+)
 
-The environment is a fixed-size 2D grid with randomly placed axis-aligned obstacles, a fixed start and goal at opposite corners, and a printable RNG seed for reproducibility. Obstacles are stored as both a NumPy boolean grid for fast broad-phase rejection and a Shapely `STRtree` for exact intersection tests.
+The environment consists of a fixed-size 2D grid with randomly placed axis-aligned obstacles, a fixed start and goal at opposite corners, and a printable RNG seed for reproducibility. Obstacles are stored as both a NumPy boolean grid for fast broad-phase rejection and a Shapely `STRtree` for exact intersection tests.
 
 
 === Collision Detection
@@ -90,11 +93,12 @@ The environment is a fixed-size 2D grid with randomly placed axis-aligned obstac
 
 The collision checker was designed to handle two geometry types: rotated rectangular footprints (for the robot body, truck, and trailer) and a line segment (the hitch bar connecting truck to trailer). Obstacles are axis-aligned grid cells, stored as both a numpy boolean array for fast grid lookups and a shapely `STRtree` of `box` polygons for exact intersection tests.
 
-#link("https://shapely.readthedocs.io/en/stable/")[shapely] is designed for general topological geometry analysis and is not inherently optimised for repeated per-frame queries against a fixed obstacle set. Naively calling intersects on individual translated geometries at every state check proved too slow for the planner's inner loop. Three optimisations were applied to address this.
+#link("https://shapely.readthedocs.io/en/stable/")[Shapely] is designed for general topological geometry analysis and is not inherently optimised for repeated per-frame queries against a fixed obstacle set. Naively calling `intersects` on individually translated geometries at every state check proved too slow for the planner's inner loop. Three optimisations were applied to address this, and their combined effect is quantified in @fig:collision_opt.
 
 ==== Heading cache.
-Rotating or translating a Shapely geometry is expensive. To exchange strict accuracy for performance, each base shape is pre-rotated at 72 evenly-spaced headings (every $5 degree$) at construction time. Per-state footprint queries look up the nearest pre-rotated shape and record only the $(x, y)$ offset, deferring translation until an exact check is actually needed.
+Rotating a Shapely geometry is expensive: internally, rotation calls `_affine_coords`, which walks every vertex of the polygon through a matrix multiply. To eliminate this per-query cost, each base shape is pre-rotated at 72 evenly-spaced headings (every $5°$) at construction time. Per-state footprint queries look up the nearest pre-rotated shape and record only the $(x, y)$ offset, deferring translation until an exact check is actually needed.
 
+As seen in @fig:collision_opt, this nearly eliminates `rotate` entirely (137,143 calls → 76), and drives an 18$times$ reduction in `_affine_coords` calls — the single largest source of time saved across both optimisations.
 
 ==== State validation.
 The state validator applies checks in order of increasing cost, exiting as soon as any check fails.
@@ -123,15 +127,22 @@ The state validator applies checks in order of increasing cost, exiting as soon 
 
 #figure(validator, caption: "Pseudocode describing state validation process.")
 
-For rectangular footprints: the translated axis-aligned bounding box (AABB) is checked against the environment boundary first. If it lies outside, the state is immediately rejected without touching any geometry. If it lies inside, the AABB is mapped to grid cell indices and the corresponding subgrid slice is checked for any occupied cel. This eliminates the majority of valid states at negligible cost. The geometry is only translated and tested exactly against the `STRTree` if the broad phase reports a possible collision.
+For rectangular footprints, the translated axis-aligned bounding box (AABB) is checked against the environment boundary first. If it lies outside, the state is immediately rejected without touching any geometry. If it lies inside, the AABB is mapped to grid cell indices and the corresponding subgrid slice is checked for any occupied cell via `_has_possible_collision`. This eliminates the majority of states at negligible cost — the geometry is only translated and tested exactly against the `STRtree` (via `intersects_any`) if the broad phase reports a possible collision.
+
+The effect is visible in @fig:collision_opt: `_has_possible_collision` appears only in the optimised profile (133,632 calls), while `intersects_any` — the expensive Shapely intersection — drops 9$times$ from 134,756 to 14,888 calls. Crucially, `is_valid_state` is called roughly the same number of times in both profiles (137,139 vs 136,017), confirming that the AABB filter does not reduce collision accuracy — it only avoids unnecessary exact checks on states that are clearly free.
+
+The combined effect of these two optimisations is a 3.2$times$ end-to-end speedup (11.0 s $->$ 3.4 s). For reference, `propagate` — which handles motion primitive generation and is unaffected by the collision optimisations — shows virtually identical call counts and cost in both profiles, confirming the speedup is attributable entirely to the collision checker.
+
+#figure(
+    image("media/photos/collision_opt_comparison.png", width: 100%),
+    caption: [Call counts and exclusive CPU time for key functions, comparing the unoptimised and optimised collision checker. Total runtime: 11.0 s (unoptimised) vs 3.4 s (optimised), a 3.2× speedup. `propagate` is included as a control to show that primitive generation cost is largely unchanged between runs.]
+) <fig:collision_opt>
 
 ===== Line segment handling.
 The trailer's hitch bar cannot be represented as a box, so it is stored as raw endpoints rather than a Shapely geometry. Containment is checked by testing both endpoints against the boundary. Obstacle intersection uses Bresenham's line algorithm against an occupancy grid, stepping cell-by-cell along the segment and returning on the first occupied cell.
 
 ==== Path-level validation.
 During planning, entire primitive trajectories must be validated, not just individual states. A two-phase approach is used: first, the last state and every 4th intermediate state are checked using the approximate (cached, untranslated) footprints. Most invalid primitives are caught here. If that passes, and fine collision checks are enabled, the remaining states are checked with exact footprints.
-
-According to cProfile, STRtree intersection calls account for approximately 5% of hybrid A\* runtime after these optimisations, with the dominant cost shifted to state expansion and heuristic evaluation.
 
 
 
