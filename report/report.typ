@@ -149,7 +149,7 @@ The collision checker was designed to handle two geometry types: rotated rectang
 ==== Heading cache.
 Rotating a Shapely geometry is expensive: internally, rotation calls `_affine_coords`, which walks every vertex of the polygon through a matrix multiply. To eliminate this per-query cost, each base shape is pre-rotated at 72 evenly-spaced headings (every $5°$) at construction time. Per-state footprint queries look up the nearest pre-rotated shape and record only the $(x, y)$ offset, deferring translation until an exact check is actually needed.
 
-As seen in @fig:collision_opt, this nearly eliminates `rotate` entirely (137,143 calls → 76), and drives an 18$times$ reduction in `_affine_coords` calls — the single largest source of time saved across both optimisations.
+As seen in @fig:collision_opt, this nearly eliminates `rotate` entirely (137,143 calls $->$ 76), and drives an #box[18$times$] reduction in `_affine_coords` calls, representing the single largest source of time saved across both optimisations.
 
 ==== State validation.
 The state validator applies checks in order of increasing cost, exiting as soon as any check fails.
@@ -180,13 +180,13 @@ The state validator applies checks in order of increasing cost, exiting as soon 
 
 For rectangular footprints, the translated axis-aligned bounding box (AABB) is checked against the environment boundary first. If it lies outside, the state is immediately rejected without touching any geometry. If it lies inside, the AABB is mapped to grid cell indices and the corresponding subgrid slice is checked for any occupied cell via `_has_possible_collision`. This eliminates the majority of states at negligible cost — the geometry is only translated and tested exactly against the `STRtree` (via `intersects_any`) if the broad phase reports a possible collision.
 
-The effect is visible in @fig:collision_opt: `_has_possible_collision` appears only in the optimised profile (133,632 calls), while `intersects_any` — the expensive Shapely intersection — drops 9$times$ from 134,756 to 14,888 calls. Crucially, `is_valid_state` is called roughly the same number of times in both profiles (137,139 vs 136,017), confirming that the AABB filter does not reduce collision accuracy — it only avoids unnecessary exact checks on states that are clearly free.
+The effect is visible in @fig:collision_opt: `_has_possible_collision` appears only in the optimised profile (133,632 calls), while `intersects_any` — the expensive Shapely intersection — drops #box[9$times$] from 134,756 to 14,888 calls. Crucially, `is_valid_state` is called roughly the same number of times in both profiles (137,139 vs 136,017), confirming that the AABB filter does not reduce collision accuracy — it only avoids unnecessary exact checks on states that are clearly free.
 
-The combined effect of these two optimisations is a 3.2$times$ end-to-end speedup (11.0 s $->$ 3.4 s). For reference, `propagate` — which handles motion primitive generation and is unaffected by the collision optimisations — shows virtually identical call counts and cost in both profiles, confirming the speedup is attributable entirely to the collision checker.
+The combined effect of these two optimisations is a #box[3.2$times$] end-to-end speedup (11.0 s $->$ 3.4 s). For reference, `propagate` — which handles motion primitive generation and is unaffected by the collision optimisations — shows virtually identical call counts and cost in both profiles, confirming the speedup is attributable entirely to the collision checker.
 
 #figure(
     image("media/photos/collision_opt_comparison.png", width: 100%),
-    caption: [Call counts and exclusive CPU time for key functions, comparing the unoptimised and optimised collision checker. Total runtime: 11.0 s (unoptimised) vs 3.4 s (optimised), a 3.2× speedup. `propagate` is included as a control to show that primitive generation cost is largely unchanged between runs.]
+    caption: [Call counts and exclusive CPU time for key functions, comparing the unoptimised and optimised collision checker. Total runtime: 11.0 s (unoptimised) vs 3.4 s (optimised), a #box[3.2$times$] speedup. `propagate` is included as a control to show that primitive generation cost is largely unchanged between runs.]
 ) <fig:collision_opt>
 
 ===== Line segment handling.
@@ -195,7 +195,7 @@ The trailer's hitch bar cannot be represented as a box, so it is stored as raw e
 ==== Path-level validation.
 During planning, entire primitive trajectories must be validated, not just individual states. A two-phase approach is used: first, the last state and every 4th intermediate state are checked using the approximate (cached, untranslated) footprints. Most invalid primitives are caught here. If that passes, and fine collision checks are enabled, the remaining states are checked with exact footprints.
 
-
+#pagebreak()
 
 
 
@@ -252,16 +252,17 @@ The final value of $n$ is simply $max(n_nu, space n_omega)$. Satisfying these co
 The cost of each primitive (and therefore edge in the A\* graph) is the arc length of the primitive plus a weighted heading change, with an additive penalty for reversals to discourage the planner from exploring backwards.
 
 
-Two vehicle-specific exceptions apply. The differential drive appends additional rotate-in-place primitives with $v = 0$. These primitives have zero arc length, their cost relying purely on heading change, allowing the planner to reason about in-place rotation as a distinct maneuver.
+Two vehicle-specific exceptions apply:
+- The differential drive appends additional rotate-in-place primitives with $v = 0$. These primitives have zero arc length, their cost relying purely on heading change, allowing the planner to reason about in-place rotation as a distinct maneuver.
 
-The trailer's primitive generation  is more involved. The truck follows the same analytic arc as any other Ackermann vehicle, but the trailer heading $phi$ is coupled to the truck via a nonlinear ODE:
+- The trailer's primitive generation is more involved. The truck follows the same analytic arc as any other Ackermann vehicle, but the trailer heading $phi$ is coupled to the truck via a nonlinear ODE:
 
-$ dot(phi) = frac(v, M) sin(theta - phi) $
+  $ dot(phi) = frac(v, M) sin(theta - phi) $
 
 
-where $M$ is the hitch-to-trailer-axle distance. This cannot be integrated in closed form alongside the truck arc, so $phi$ is propagated sequentially: the truck positions and headings are computed analytically in one pass, then $phi$ is stepped forward through the resulting sequence using Euler's method.
+  where $M$ is the hitch-to-trailer-axle distance. This cannot be integrated in closed form alongside the truck arc, so $phi$ is propagated sequentially: the truck positions and headings are computed analytically in one pass, then $phi$ is stepped forward through the resulting sequence using Euler's method.
 
-Paths that result in the trailer jackknifing #footnote()[When a vehicle towing a trailer loses control, causing the trailer to swing out and form an acute angle with the towing vehicle, resembling a folding pocket knife.] are treated as invalid: each step is checked against a jackknife limit via the condition $|theta - phi| < 90 degree$. If the limit is exceeded, the primitive is discarded.
+  Paths that result in the trailer jackknifing #footnote()[When a vehicle towing a trailer loses control, causing the trailer to swing out and form an acute angle with the towing vehicle, resembling a folding pocket knife.] are treated as invalid: each step is checked against a jackknife limit via the condition $|theta - phi| < 90 degree$. If the limit is exceeded, the primitive is discarded.
 
 ==== Last-Shot Connection
 
@@ -269,16 +270,16 @@ When a node falls within a euclidean distance of `terminal_radius` of the goal p
 
 This avoids the difficulty of landing exactly on the goal pose through discrete primitives, and is the mechanism by which the planner achieves precise heading alignment at the goal.
 
-The attempted path is validated for collisions before being accepted. For the trailer, the trailer heading is simultaneously integrated along the RS path and the attempt is rejected if jackknifing occurs. As the planner is unable to directly control the trailer heading, it rejects attempts if the trailer heading at the goal is within a set tolerance.
+The attempted path is validated for collisions before being accepted. For the trailer, the trailer heading is simultaneously integrated along the RS path and the attempt is rejected if jackknifing occurs. Additionally, as the planner is unable to directly control the trailer heading, it rejects attempts if the trailer heading at the end of the connection is within a set tolerance of the goal.
 
 
 ==== Post-Processing
 
-The raw path from the search is passed through two steps before playback.
+The raw path from the search is passed through two steps before playback:
 
-Smoothing applies probabilistic shortcutting: two random indices are chosen, a direct connection is attempted via `generate_trajectory`, and if collision-free it replaces the span. This is repeated for 100 iterations and typically removes significant detours introduced by the discrete primitive structure. This step is done by the function `smooth_path`.
+- *Path smoothing* (`smooth_path`): two random indices are chosen, a direct connection is attempted via `generate_trajectory`, and if collision-free it replaces the span between those two indices. After repeating for 100 iterations, this step typically removes the jaggedness introduced by the discrete primitive structure.
 
-Resampling converts the variable-density path into uniform arc-length samples so the animation plays back at a constant velocity. Pure-rotation segments (zero XY displacement) are detected separately and resampled at a fixed angular rate. This step is done by the function `resample_path`.
+- *Resampling* (`resample_path`): the variable-density path is converted to uniform arc-length samples so the animation plays back at constant velocity. Pure-rotation segments (zero XY displacement) are detected separately and resampled at a distinct angular rate.
 
 === Results <results>
 
