@@ -16,6 +16,10 @@ The planner uses a python implementation of the Hybrid A\* search algorithm, a v
 
 Collision detection is built on #link("https://shapely.readthedocs.io/en/stable/")[shapely] polygon geometry with a broad-phase occupancy-grid filter and a pre-rotated heading cache to keep query cost low. After successfully finding a raw path to the goal pose, it is post-processed by probabilistic shortcutting and then resampled to a uniform velocity for smooth playback.
 
+#figure(
+    image("media/photos/trailer_sim.png", width: 90%),
+    caption: [Trailer simulation mid-traversal. The traced path follows the center of the rear axle for Ackermann and trailer vehicles, and the geometric center for differential drive and point robots. Blue dots mark the $(x, y)$ position of every state expanded during the planning phase.]
+)
 
 ==== Usage
 
@@ -57,6 +61,8 @@ runsim [bot_type] [options]
 -r / --record    save the simulation to recording.mp4
 -s / --seed N    fix the RNG seed for a reproducible obstacle layout
 ```
+
+While the simulation is running, pressing `s` saves a screenshot to the current directory (distinct from the `-s` / `--seed` launch flag).
 
 For example, to run the trailer bot with a fixed seed:
 ```
@@ -324,7 +330,9 @@ The planner works well across all four vehicle types. The trailer in particular 
 
     The differential drive model is directly equivalent, while Ackermann steering has a dependency between the velocity $nu$ and steering angle $delta$:
 
-    $ omega = nu dot tan(delta) / "wheelbase" $ <eq:ackermann_omega>
+    $ omega = nu dot tan(delta) / L $ <eq:ackermann_omega>
+
+    where $L$ is the wheelbase (distance between front and rear axles).
 
    When $nu$ and $omega$ are held constant, the heading evolves linearly as $ theta(t)= theta_0 + omega$, reducing the position integrals to standard trigonometric forms with known closed-form solutions.
 

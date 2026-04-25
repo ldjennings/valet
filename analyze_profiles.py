@@ -64,7 +64,8 @@ for ax, metric, ylabel in [
     ax.set_xticklabels(labels, rotation=25, ha="right", fontsize=FONT_TICK)
     ax.set_ylabel(ylabel, fontsize=FONT_LABEL)
     ax.legend(fontsize=FONT_LEGEND)
-    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:,.0f}"))
+    fmt = (lambda v, _: f"{v:,.0f}") if metric == 0 else (lambda v, _: f"{v:.2f}")
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(fmt))
     ax.tick_params(axis="y", labelsize=FONT_TICK)
 
 fig.suptitle(

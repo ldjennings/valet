@@ -103,7 +103,7 @@ def main() -> None:
     print(f"Using seed: {seed}  (re-run with -s {seed} to reproduce)")
     
     bundle, environment = _make_scenario(args.bot_type, seed)
-    config = HybridConfig(spacing=1, angular_spacing=math.pi / 3, max_iterations=45000, fine_collision=True)
+    config = HybridConfig(spacing=1, angular_spacing=math.pi / 3, max_iterations=45000, fine_collision=False)
 
     Simulator(bundle, environment, config).run(args.manual, args.record)
 
