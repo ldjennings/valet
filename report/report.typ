@@ -199,8 +199,14 @@ The state validator applies checks in order of increasing cost, exiting as soon 
 #figure(validator, caption: "Pseudocode describing state validation process.")
 
 For rectangular footprints, the translated axis-aligned bounding box (AABB) is checked against the environment boundary first. If it lies outside, the state is immediately rejected without touching any geometry. If it lies inside, the AABB is mapped to grid cell indices and the corresponding subgrid slice is checked for any occupied cell via `_has_possible_collision`. This eliminates the majority of states at negligible cost — the geometry is only translated and tested exactly against the `STRtree` (via `intersects_any`) if the broad phase reports a possible collision.
-// TODO: make figure that visualizes the AABB, including highlighting what cells are being considered for collision
-The effect is visible in @fig:collision_opt: `_has_possible_collision` appears only in the optimised profile (133,632 calls), while `intersects_any` — the expensive Shapely intersection — drops #box[9$times$] from 134,756 to 14,888 calls. Crucially, `is_valid_state` is called roughly the same number of times in both profiles (137,139 vs 136,017), confirming that the AABB filter does not reduce collision accuracy — it only avoids unnecessary exact checks on states that are clearly free.
+#figure(
+    image("media/photos/aabb_check.svg", width: 80%),
+    caption: [
+        Broad-phase AABB collision check. The car footprint (blue) is rotated at 35°; its axis-aligned bounding box (orange, dashed) is mapped to grid cell indices and only the highlighted cells are queried for obstacles. The purple obstacle falls inside the AABB and triggers an exact Shapely intersection check; the grey obstacle is outside the AABB and is skipped entirely. The broad phase is conservative — an obstacle can be inside the AABB without touching the footprint — but never misses a true collision.
+    ],
+) <fig:aabb_check>
+
+The effect is visible in @fig:collision_opt: `_has_possible_collision` appears only in the optimised profile (133,632 calls), while `intersects_any` — the expensive Shapely intersection — drops #box[9$times$] from 134,756 to 14,888 calls. Crucially, `is_valid_state` is called roughly the same number of times in both profiles (137,139 vs 136,017), confirming that the AABB filter does not reduce collision accuracy, instead avoiding exact checks on states that are clearly free.
 
 The combined effect of these two optimisations is a #box[3.2$times$] end-to-end speedup (11.0 s $->$ 3.4 s). For reference, `propagate` — which handles motion primitive generation and is unaffected by the collision optimisations — shows virtually identical call counts and cost in both profiles, confirming the speedup is attributable entirely to the collision checker.
 

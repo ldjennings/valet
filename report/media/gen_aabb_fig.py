@@ -133,7 +133,7 @@ legend_patches = [
     mpatches.Patch(facecolor="#8b008b", alpha=0.75, label="Obstacle (inside AABB — exact check triggered)"),
 ]
 ax.legend(handles=legend_patches, loc="upper left",
-          prop=font_manager.FontProperties(family="NewComputerModern08", size=7.5),
+          prop=font_manager.FontProperties(family="NewComputerModern08", size=11),
           framealpha=0.9)
 
 # ── Axes ──────────────────────────────────────────────────────────────────────
