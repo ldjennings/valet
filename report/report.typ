@@ -269,6 +269,8 @@ When a node falls within a euclidean distance of `terminal_radius` of the goal p
 
 This avoids the difficulty of landing exactly on the goal pose through discrete primitives, and is the mechanism by which the planner achieves precise heading alignment at the goal.
 
+The connection is not attempted on every node within the terminal radius. Since the trajectory must be validated for collisions, attempting it from every qualifying node is expensive and unlikely to pay off far from the goal where obstacles are more likely to block a direct path. Following @kurzer_path_2016[Section 6.1.2], a distance-proportional probability gate is applied: the attempt probability scales linearly from 0 at the edge of the terminal radius to 1 at the goal position itself.
+
 The attempted path is validated for collisions before being accepted. For the trailer, the trailer heading is simultaneously integrated along the RS path and the attempt is rejected if jackknifing occurs. As the planner is unable to directly control the trailer heading, it rejects attempts if the trailer heading at the goal is within a set tolerance.
 
 
