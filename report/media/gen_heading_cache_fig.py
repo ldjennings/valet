@@ -18,6 +18,8 @@ from matplotlib import font_manager
 _font_dir = Path(__file__).parents[1] / "newcm-8.0.0" / "otf"
 for _variant in ("Regular", "Bold", "Italic", "BoldItalic"):
     font_manager.fontManager.addfont(str(_font_dir / f"NewCM10-{_variant}.otf"))
+for _variant in ("Regular", "Italic"):
+    font_manager.fontManager.addfont(str(_font_dir / f"NewCM08-{_variant}.otf"))
 matplotlib.rcParams["font.family"] = "NewComputerModern10"
 matplotlib.rcParams["font.size"] = 11
 import matplotlib.pyplot as plt
@@ -157,7 +159,9 @@ legend_patches = [
     mpatches.Patch(facecolor="#2a5caa", alpha=0.85, label="Falsely blocked — cached only\n(obstacle here → false collision)"),
     mpatches.Patch(facecolor="#d4600a", alpha=0.85, label="Falsely cleared — true only\n(obstacle here → missed collision)"),
 ]
-ax2.legend(handles=legend_patches, loc="upper left", fontsize=8)
+ax2.legend(handles=legend_patches, loc="upper left",
+           prop=font_manager.FontProperties(family="NewComputerModern08", size=7),
+           title_fontsize=7)
 
 # ── Save ─────────────────────────────────────────────────────────────────────
 
