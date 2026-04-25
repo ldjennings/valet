@@ -10,6 +10,7 @@ terminates. The returned path is then smoothed and resampled by postprocessing.
 
 from dataclasses import dataclass, field
 import math
+import random
 from typing import Generic, cast, TypeAlias
 import heapq
 
@@ -278,20 +279,24 @@ def hybrid_astar(
                f"pos = ({p[0]:.2f}, {p[1]:.2f})")
 
         if bot.is_terminal(current, goal):
-            attempted_path = bot.generate_trajectory(current, goal)
+            dist = center_distance(current.position(), goal.position())
+            attempt_prob = 1.0 - (dist / bot.TERMINAL_RADIUS)
+            if random.random() < attempt_prob:
+                attempted_path = bot.generate_trajectory(current, goal)
 
-            if attempted_path is not None \
-                and validate_path(env, bot, attempted_path, fine_checking=config.fine_collision) \
-                and bot.at_goal(attempted_path[-1], goal):
+                 # always fine checking: one-shot is the final accepted path, correctness matters more than speed here
+                if attempted_path is not None \
+                    and validate_path(env, bot, attempted_path, fine_checking=True) \
+                    and bot.at_goal(attempted_path[-1], goal):
 
-                print(f"[hybrid_astar] found path: {len(visited)} expansions, "
-                    f"{len(reconstruct_path(node, attempted_path))} states")
+                    print(f"[hybrid_astar] found path: {len(visited)} expansions, "
+                        f"{len(reconstruct_path(node, attempted_path))} states")
 
-                raw_path = smooth_path(reconstruct_path(node, attempted_path), bot, env)
-                return PlanResult(
-                    path=resample_path(raw_path),
-                    visited_xy=visited_xy,
-                )
+                    raw_path = smooth_path(reconstruct_path(node, attempted_path), bot, env)
+                    return PlanResult(
+                        path=resample_path(raw_path),
+                        visited_xy=visited_xy,
+                    )
 
         # explore neighbors
         for prim in propagated_primitives(bot, current, config, config.steering_granularity):

@@ -78,6 +78,8 @@ class Bot(Protocol[S]):
         """
         ...
 
+    TERMINAL_RADIUS: float
+
     def is_terminal(self, state: S, goal: S) -> bool:
         """
         Returns True if state is close enough to goal to fire the terminal
@@ -181,7 +183,7 @@ class BotBase:
 class PointBot(BotBase):
     """Holonomic point robot. Can move in any direction; no heading or turning constraints."""
 
-    TERMINAL_RADIUS = 10.0
+    TERMINAL_RADIUS = 5.0
 
 
     def __init__(self, goal_radius_tol: float = cfg.GOAL_RADIUS_TOLERANCE):
@@ -354,7 +356,7 @@ class CarBot(BotBase):
     """Ackermann steering (car-like) robot. Non-holonomic; minimum turning radius determined by MAX_STEER."""
 
     MAX_STEER       = math.radians(45)
-    TERMINAL_RADIUS = 10.0
+    TERMINAL_RADIUS = 5.0
 
     def __init__(
         self,
@@ -438,7 +440,7 @@ class TrailerBot(BotBase):
     """
 
     MAX_STEER       = math.radians(35)
-    TERMINAL_RADIUS = 15.0
+    TERMINAL_RADIUS = 6.0
     JACKKNIFE_LIMIT = math.pi / 2  # max allowed angle between truck and trailer headings
 
     def __init__(
