@@ -158,8 +158,15 @@ The collision checker was designed to handle two geometry types: rotated rectang
 #link("https://shapely.readthedocs.io/en/stable/")[Shapely] is designed for general topological geometry analysis and is not inherently optimised for repeated per-frame queries against a fixed obstacle set. Naively calling `intersects` on individually translated geometries at every state check proved too slow for the planner's inner loop. Three optimisations were applied to address this, and their combined effect is quantified in @fig:collision_opt.
 
 === Heading cache <heading_cache>
-// TODO: figure with rotated shape
+
 Rotating a Shapely geometry is expensive: internally, rotation calls `_affine_coords`, which walks every vertex of the polygon through a matrix multiply. To eliminate this per-query cost, each base shape is pre-rotated at 72 evenly-spaced headings (every $5°$) at construction time. Per-state footprint queries look up the nearest pre-rotated shape and record only the $(x, y)$ offset, deferring translation until an exact check is actually needed.
+
+#figure(
+    image("media/photos/heading_cache.svg", width: 100%),
+    caption: [
+        *Left:* three of the 72 pre-rotated car footprints stored in the heading cache (shown at 120$degree$ intervals for clarity; the full cache covers every 5$degree$). Arrows indicate the forward direction of each cached shape. *Right:* worst-case approximation error — the true footprint at 22.5$degree$ versus the nearest cached shape at 20$degree$, the maximum possible snap error being 2.5$degree$. Errors only occur when an obstacle intersects exclusively one discrepancy region (\~3.5% of vehicle area each); obstacles within the shared overlap are correctly detected by both shapes.
+    ],
+) <fig:heading_cache>
 
 As seen in @fig:collision_opt, this nearly eliminates `rotate` entirely (137,143 calls $->$ 76), and drives an #box[18$times$] reduction in `_affine_coords` calls, representing the single largest source of time saved across both optimisations.
 
@@ -192,14 +199,14 @@ The state validator applies checks in order of increasing cost, exiting as soon 
 #figure(validator, caption: "Pseudocode describing state validation process.")
 
 For rectangular footprints, the translated axis-aligned bounding box (AABB) is checked against the environment boundary first. If it lies outside, the state is immediately rejected without touching any geometry. If it lies inside, the AABB is mapped to grid cell indices and the corresponding subgrid slice is checked for any occupied cell via `_has_possible_collision`. This eliminates the majority of states at negligible cost — the geometry is only translated and tested exactly against the `STRtree` (via `intersects_any`) if the broad phase reports a possible collision.
-// TODO: make change that visualizes the AABB, including highlighting what cells are being considered for collision
+// TODO: make figure that visualizes the AABB, including highlighting what cells are being considered for collision
 The effect is visible in @fig:collision_opt: `_has_possible_collision` appears only in the optimised profile (133,632 calls), while `intersects_any` — the expensive Shapely intersection — drops #box[9$times$] from 134,756 to 14,888 calls. Crucially, `is_valid_state` is called roughly the same number of times in both profiles (137,139 vs 136,017), confirming that the AABB filter does not reduce collision accuracy — it only avoids unnecessary exact checks on states that are clearly free.
 
 The combined effect of these two optimisations is a #box[3.2$times$] end-to-end speedup (11.0 s $->$ 3.4 s). For reference, `propagate` — which handles motion primitive generation and is unaffected by the collision optimisations — shows virtually identical call counts and cost in both profiles, confirming the speedup is attributable entirely to the collision checker.
 
 #figure(
     image("media/photos/collision_opt_comparison.png", width: 100%),
-    caption: [Call counts and exclusive CPU time for key functions, comparing the unoptimised and optimised collision checker. Total runtime: 11.0 s (unoptimised) vs 3.4 s (optimised), a #box[3.2$times$] speedup. `propagate` is included as a control to show that primitive generation cost is largely unchanged between runs.]
+    caption: [Call counts (*above*) and exclusive CPU time (*below*) for key functions, comparing the unoptimised and optimised collision checker. Total runtime: 11.0 s (unoptimised) vs 3.4 s (optimised), a #box[3.2$times$] speedup. `propagate` is included as a control to show that primitive generation cost is largely unchanged between runs.]
 ) <fig:collision_opt>
 
 === Line segment handling.
