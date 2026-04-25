@@ -19,12 +19,29 @@ Collision detection is built on #link("https://shapely.readthedocs.io/en/stable/
 
 ==== Usage
 
-Dependencies are managed via `pyproject.toml`. A `Makefile` is provided for convenience:
+The project requires *Python 3.12*. The `reeds_shepp` dependency (`deps/pyReedsShepp`) also includes a C++ extension that requires the Boost headers at build time. Install them before setting up the environment:
+
+- *Ubuntu/Debian:* `sudo apt install libboost-dev`
+- *Arch:* `sudo pacman -S boost`
+- *macOS:* `brew install boost`
+- *NixOS:* provided automatically by the Nix dev shell (`nix develop`)
+
+The recommended way to install dependencies is with #link("https://docs.astral.sh/uv/")[uv]. It will download and manage Python 3.12 automatically — no separate Python installation required:
 
 ```
-make install   # create .venv and install all dependencies
-make venv      # create .venv if needed, then print the activation command
-make clean     # remove .venv, caches, build artifacts, and any recorded mp4s
+# install uv (once, system-wide)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+uv sync          # installs Python 3.12 + all dependencies
+uv run runsim    # run the simulator
+```
+
+Alternatively, a `Makefile` is provided for manual setup if Python 3.12 is already available:
+
+```
+make pip-install   # create .venv and install all dependencies via pip
+make venv          # create .venv if needed, then print the activation command
+make clean         # remove .venv, caches, build artifacts, and any recorded mp4s
 ```
 
 After activating the environment, the simulator is launched with the `runsim` entry point:
