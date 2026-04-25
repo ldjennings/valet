@@ -1,7 +1,7 @@
 __pycache__/
 venv/
 *.gif
-*.svg
+./*.svg
 # report.pdf
 scratch.py
 scratch.typ
@@ -11,6 +11,7 @@ scratch/
 ./*.prof
 profile*
 screenshot_*
+*report.pdf
 
 # Created by https://www.toptal.com/developers/gitignore/api/python,visualstudiocode
 # Edit at https://www.toptal.com/developers/gitignore?templates=python,visualstudiocode

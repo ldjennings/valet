@@ -1,20 +1,29 @@
 [project]
- name = "Valet_Assignment"
- version = "0.1.0"
- authors = [
-    {name = "Liam Jennings"},
- ]
- dependencies = [
-   "numpy~=2.3.3",
-   "pygame~=2.6.1",
-   "shapely~=2.1.2",
-   "cython~=3.2",
-   "imageio~=2.37",
-   "imageio-ffmpeg~=0.6",
-   "reeds_shepp @ file:deps/pyReedsShepp",
-
+name = "Valet_Assignment"
+version = "0.1.0"
+requires-python = ">=3.12"
+authors = [
+   {name = "Liam Jennings"},
+]
+dependencies = [
+  "numpy~=2.3.3",
+  "pygame~=2.6.1",
+  "shapely~=2.1.2",
+  "cython~=3.2",
+  "imageio~=2.37",
+  "imageio-ffmpeg~=0.6",
+  "reeds_shepp",
 ]
 
+[tool.uv.sources]
+reeds_shepp = { path = "deps/pyReedsShepp" }
+
+
+[project.optional-dependencies]
+dev = [
+  "snakeviz",
+  "matplotlib",
+]
 
 [project.scripts]
 runsim="main:main"
