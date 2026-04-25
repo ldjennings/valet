@@ -128,45 +128,41 @@ class ObstacleEnvironment:
     def _segment_hits_obstacle(self, x0: float, y0: float, x1: float, y1: float) -> bool:
         """
         Check whether the line segment (x0,y0)→(x1,y1) passes through any occupied grid cell,
-        using Bresenham's line algorithm. https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm
-
-        No allocation — pure integer arithmetic directly on the grid array.
-
-        How it works:
-          1. Convert both endpoints from world coordinates to integer grid-cell indices.
-          2. Compute the axis-aligned deltas (dx, dy) and step directions (sx, sy).
-          3. Maintain an integer error term `err = dx - dy` that tracks how far the
-             true line has drifted from the current grid cell centre.
-          4. Each iteration, double the error (e2 = 2*err) and compare against the
-             thresholds -dy and dx to decide whether to step in x, y, or both.
-             This keeps the rasterised path within 0.5 cells of the true line at all times.
-          5. Return True immediately on the first occupied cell; return False if the
-             endpoint is reached without a hit.
+        using the fast voxel traversal algorithm (Amanatides & Woo, 1987).
         """
         cs = self.cell_size
-        cx, cy     = int(x0 // cs), int(y0 // cs)
-        ex, ey     = int(x1 // cs), int(y1 // cs)
-        dx, dy     = abs(ex - cx), abs(ey - cy)
-        sx, sy     = (1 if ex > cx else -1), (1 if ey > cy else -1)
-        err        = dx - dy
         rows, cols = self.grid.shape
 
+        cx, cy = int(x0 // cs), int(y0 // cs)
+        ex, ey = int(x1 // cs), int(y1 // cs)
+
+        dx = x1 - x0
+        dy = y1 - y0
+
+        step_x = 1 if dx > 0 else -1
+        step_y = 1 if dy > 0 else -1
+
+        # t increment to cross one full cell in each axis
+        t_delta_x = abs(cs / dx) if dx != 0 else float('inf')
+        t_delta_y = abs(cs / dy) if dy != 0 else float('inf')
+
+        # t at which the ray first crosses a boundary in each axis
+        next_x = (cx + (1 if dx > 0 else 0)) * cs
+        next_y = (cy + (1 if dy > 0 else 0)) * cs
+        t_max_x = abs((next_x - x0) / dx) if dx != 0 else float('inf')
+        t_max_y = abs((next_y - y0) / dy) if dy != 0 else float('inf')
+
         while True:
-            # hit an obstacle
             if 0 <= cy < rows and 0 <= cx < cols and self.grid[cy, cx]:
                 return True
-            # hit the end of the line
             if cx == ex and cy == ey:
                 return False
-            e2 = 2 * err
-            # step horizontally when the error favours x
-            if e2 > -dy:
-                err -= dy
-                cx  += sx
-            # step vertically when the error favours y
-            if e2 < dx:
-                err += dx
-                cy  += sy
+            if t_max_x < t_max_y:
+                t_max_x += t_delta_x
+                cx += step_x
+            else:
+                t_max_y += t_delta_y
+                cy += step_y
 
     def is_valid_state(self, bot_geoms: list[FootprintEntry]) -> bool:
         """Return True if none of the geometries intersect any obstacle and all lie within the boundary."""
