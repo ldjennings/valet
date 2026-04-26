@@ -168,7 +168,7 @@ Rotating a Shapely geometry is expensive: internally, rotation calls `_affine_co
     ],
 ) <fig:heading_cache>
 
-As seen in @fig:collision_opt, this nearly eliminates `rotate` entirely (137,143 calls $->$ 76), and drives an #box[18$times$] reduction in `_affine_coords` calls, representing the single largest source of time saved across both optimisations.
+As seen in @fig:collision_opt, this nearly eliminates `rotate` entirely (974,294 calls $->$ 3,622), and drives a #box[65$times$] reduction in `_affine_coords` calls (1,948,445 $->$ 29,917), representing the single largest source of time saved across both optimisations.
 
 === State validation
 
@@ -196,7 +196,7 @@ The state validator applies checks in order of increasing cost, exiting as soon 
   ```
 ]
 
-#figure(validator, caption: "Pseudocode describing state validation process.")
+#figure(validator, caption: [Pseudocode describing state validation process.])
 
 For rectangular footprints, the translated axis-aligned bounding box (AABB) is checked against the environment boundary first. If it lies outside, the state is immediately rejected without touching any geometry. If it lies inside, the AABB is mapped to grid cell indices and the corresponding subgrid slice is checked for any occupied cell via `_has_possible_collision`. This eliminates the majority of states at negligible cost as the geometry is only translated and tested exactly against the `STRtree` (via `intersects_any`) if the broad phase reports a possible collision.
 #figure(
@@ -206,13 +206,13 @@ For rectangular footprints, the translated axis-aligned bounding box (AABB) is c
     ],
 ) <fig:aabb_check>
 
-The effect is visible in @fig:collision_opt: `_has_possible_collision` appears only in the optimised profile (133,632 calls), while `intersects_any` — the expensive Shapely intersection — drops #box[9$times$] from 134,756 to 14,888 calls. Crucially, `is_valid_state` is called roughly the same number of times in both profiles (137,139 vs 136,017), confirming that the AABB filter does not reduce collision accuracy, instead avoiding exact checks on states that are clearly free.
+The effect is visible in @fig:collision_opt: `_has_possible_collision` appears only in the optimised profile (935,415 calls), while `intersects_any` — the expensive Shapely intersection — drops #box[41$times$] from 938,273 to 23,006 calls. Crucially, `is_valid_state` is called roughly the same number of times in both profiles (487,071 vs 485,689), confirming that the AABB filter does not reduce collision accuracy, instead avoiding exact checks on states that are clearly free.
 
-The combined effect of these two optimisations is a #box[3.2$times$] end-to-end speedup (11.0 s $->$ 3.4 s). For reference, `propagate` — which handles motion primitive generation and is unaffected by the collision optimisations — shows virtually identical call counts and cost in both profiles, confirming the speedup is attributable entirely to the collision checker.
+The combined effect of these two optimisations is a #box[3.98$times$] end-to-end speedup (81.5 s $->$ 20.5 s). For reference, `propagate` — which handles motion primitive generation and is unaffected by the collision optimisations — shows virtually identical call counts and cost in both profiles, confirming the speedup is attributable entirely to the collision checker.
 
 #figure(
-    image("media/photos/collision_opt_comparison.png", width: 100%),
-    caption: [Call counts (*above*) and exclusive CPU time (*below*) for key functions, comparing the unoptimised and optimised collision checker. Total runtime: 11.0 s (unoptimised) vs 3.4 s (optimised), a #box[3.2$times$] speedup. `propagate` is included as a control to show that primitive generation cost is largely unchanged between runs.]
+    image("media/photos/collision_opt_comparison.svg", width: 100%),
+    caption: [Call counts (*above*) and exclusive CPU time (*below*) for key functions, comparing the unoptimised and optimised collision checker. Total runtime: 81.5 s (unoptimised) vs 20.5 s (optimised), a #box[3.98$times$] speedup. `propagate` is included as a control to show that primitive generation cost is largely unchanged between runs.]
 ) <fig:collision_opt>
 
 === Line segment handling
