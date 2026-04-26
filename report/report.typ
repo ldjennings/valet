@@ -308,7 +308,17 @@ The attempted path is validated for collisions before being accepted. For the tr
 
 The raw path from the search is passed through two steps before playback:
 
-- *Path smoothing* @geraerts_creating_2007[Section 3.2] (`smooth_path`): two random indices are chosen, a direct connection is attempted via `generate_trajectory`, and if collision-free it replaces the span between those two indices. After repeating for 100 iterations, this step typically removes the jaggedness introduced by the discrete primitive structure.
+- *Path smoothing* @geraerts_creating_2007[Section 3.2] (`smooth_path`): two random indices are chosen, a direct connection is attempted via `generate_trajectory`, and if collision-free it replaces the span between those two indices. After repeating for 100 iterations, this step reduces total path length by replacing indirect routes imposed by the search order with more direct connections.
+
+#figure(
+    grid(
+        columns: 2,
+        gutter: 1em,
+        image("media/photos/path_smoothing_fig_unsmoothed.png"),
+        image("media/photos/path_smoothing_fig_smoothed.png"),
+    ),
+    caption: [Car path before (*left*) and after (*right*) probabilistic shortcutting. The raw path takes a wide detour imposed by the order in which the search explored the space; smoothing finds direct Reeds-Shepp shortcuts that reduce total path length.]
+)
 
 - *Resampling* (`resample_path`): the variable-density path is converted to uniform arc-length samples so the animation plays back at constant velocity. Pure-rotation segments (zero XY displacement) are detected separately and resampled at a distinct angular rate.
 
@@ -323,7 +333,7 @@ The raw path from the search is passed through two steps before playback:
         image("media/photos/bot_nav_photos/car_nav.png"),
         image("media/photos/bot_nav_photos/trailer_nav.png"),
     ),
-    caption: [Navigation results for each vehicle type: point robot (top left), differential drive (top right), Ackermann car (bottom left), trailer (bottom right).]
+    caption: [Navigation results for each vehicle type: point robot (*top left*), differential drive (*top right*), Ackermann car (*bottom left*), trailer (*bottom right*).]
 )
 
 The planner works well across all four vehicle types. The trailer in particular produces some satisfying paths — watching it navigate tight spaces while keeping the trailer heading under control is a good demonstration that the coupled kinematics are being handled correctly. Performance ended up in a reasonable place after profiling, making iteration much faster than it was early on. The codebase also ended up in a good state structurally; having a clean interface between vehicle types made it easy to experiment with planner parameters and add features without things breaking unexpectedly.

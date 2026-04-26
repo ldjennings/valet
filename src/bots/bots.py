@@ -356,7 +356,7 @@ class CarBot(BotBase):
     """Ackermann steering (car-like) robot. Non-holonomic; minimum turning radius determined by MAX_STEER."""
 
     MAX_STEER       = math.radians(45)
-    TERMINAL_RADIUS = 5.0
+    TERMINAL_RADIUS = 9.0
 
     def __init__(
         self,
