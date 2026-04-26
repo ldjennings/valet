@@ -15,7 +15,7 @@ from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 from matplotlib import font_manager
-_font_dir = Path(__file__).parents[1] / "newcm-8.0.0" / "otf"
+_font_dir = Path(__file__).parents[2] / "newcm-8.0.0" / "otf"
 for _variant in ("Regular", "Bold", "Italic", "BoldItalic"):
     font_manager.fontManager.addfont(str(_font_dir / f"NewCM10-{_variant}.otf"))
 for _variant in ("Regular", "Italic"):
@@ -30,7 +30,7 @@ from shapely.affinity import rotate, translate
 from shapely.geometry import box
 from shapely.ops import unary_union
 
-OUT = Path(__file__).with_name("photos") / "heading_cache.svg"
+OUT = Path(__file__).parents[1] / "photos" / "heading_cache.svg"
 
 # ── Car geometry (mirrors geometry.py / config.py) ───────────────────────────
 

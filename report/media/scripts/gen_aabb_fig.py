@@ -14,7 +14,7 @@ from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 from matplotlib import font_manager
-_font_dir = Path(__file__).parents[1] / "newcm-8.0.0" / "otf"
+_font_dir = Path(__file__).parents[2] / "newcm-8.0.0" / "otf"
 for _variant in ("Regular", "Bold", "Italic", "BoldItalic"):
     font_manager.fontManager.addfont(str(_font_dir / f"NewCM10-{_variant}.otf"))
 for _variant in ("Regular", "Italic"):
@@ -28,7 +28,7 @@ from matplotlib.patches import Polygon as MplPolygon, FancyArrowPatch
 from shapely.affinity import rotate, translate
 from shapely.geometry import box
 
-OUT = Path(__file__).with_name("photos") / "aabb_check.svg"
+OUT = Path(__file__).parents[1] / "photos" / "aabb_check.svg"
 
 # ── Car geometry (mirrors geometry.py / config.py) ────────────────────────────
 
@@ -129,8 +129,8 @@ legend_patches = [
     mpatches.Patch(facecolor="#2a5caa", edgecolor="#1a3c7a", alpha=0.7, label="Car footprint"),
     mpatches.Patch(facecolor="none", edgecolor="#d4600a", linestyle="--", linewidth=1.5, label="AABB"),
     mpatches.Patch(facecolor="#aec6e8", alpha=0.5, label="Cells checked (inside AABB)"),
-    mpatches.Patch(facecolor="#555555", alpha=0.75, label="Obstacle (outside AABB — skipped)"),
-    mpatches.Patch(facecolor="#8b008b", alpha=0.75, label="Obstacle (inside AABB — exact check triggered)"),
+    mpatches.Patch(facecolor="#555555", alpha=0.75, label="Obstacle (outside AABB → skipped)"),
+    mpatches.Patch(facecolor="#8b008b", alpha=0.75, label="Obstacle (inside AABB → exact check triggered)"),
 ]
 ax.legend(handles=legend_patches, loc="upper left",
           prop=font_manager.FontProperties(family="NewComputerModern08", size=11),

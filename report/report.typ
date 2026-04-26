@@ -81,7 +81,7 @@ The project uses the following notable external libraries:
 
 - *#link("https://www.pygame.org/")[Pygame]* — provides the real-time 2-D rendering window, keyboard event handling for manual drive mode, and the simulation loop.
 
-- *#link("https://shapely.readthedocs.io/en/stable/")[Shapely]* — computational geometry library used to represent robot footprints as polygons and query them against obstacle geometry via an STRtree spatial index.
+- *#link("https://shapely.readthedocs.io/en/stable/")[Shapely]* — computational geometry library used to represent robot footprints as polygons and query them against obstacle geometry via an STRtree #footnote[A spatial index structure for fast nearest-neighbour queries, in the same vein as an Octree] spatial index.
 
 - *#link("https://imageio.readthedocs.io/")[imageio] / imageio-ffmpeg* — used together to encode simulation recordings to MP4 when the `--record` flag is passed; imageio-ffmpeg supplies the FFmpeg backend.
 
@@ -107,7 +107,7 @@ The code was also an experiment with modern Python's type system — `typing.Pro
 
 #figure(
     image("media/photos/obstacle_env.png",width: 80%),
-    caption:"Obstacles generated given a 10% occupation requirement. Captured while driving the car in manual mode."
+    caption: [Obstacles generated given a 10% occupation requirement. Captured while driving the car in manual mode.]
 )
 
 The environment consists of a fixed-size 2D grid with randomly placed axis-aligned obstacles, a fixed start and goal at opposite corners, and a printable RNG seed for reproducibility. Obstacles are stored as both a NumPy boolean grid for fast broad-phase rejection and a Shapely `STRtree` for exact intersection tests.
@@ -198,11 +198,11 @@ The state validator applies checks in order of increasing cost, exiting as soon 
 
 #figure(validator, caption: "Pseudocode describing state validation process.")
 
-For rectangular footprints, the translated axis-aligned bounding box (AABB) is checked against the environment boundary first. If it lies outside, the state is immediately rejected without touching any geometry. If it lies inside, the AABB is mapped to grid cell indices and the corresponding subgrid slice is checked for any occupied cell via `_has_possible_collision`. This eliminates the majority of states at negligible cost — the geometry is only translated and tested exactly against the `STRtree` (via `intersects_any`) if the broad phase reports a possible collision.
+For rectangular footprints, the translated axis-aligned bounding box (AABB) is checked against the environment boundary first. If it lies outside, the state is immediately rejected without touching any geometry. If it lies inside, the AABB is mapped to grid cell indices and the corresponding subgrid slice is checked for any occupied cell via `_has_possible_collision`. This eliminates the majority of states at negligible cost as the geometry is only translated and tested exactly against the `STRtree` (via `intersects_any`) if the broad phase reports a possible collision.
 #figure(
     image("media/photos/aabb_check.svg", width: 80%),
     caption: [
-        Broad-phase AABB collision check. The car footprint (blue) is rotated at 35°; its axis-aligned bounding box (orange, dashed) is mapped to grid cell indices and only the highlighted cells are queried for obstacles. The purple obstacle falls inside the AABB and triggers an exact Shapely intersection check; the grey obstacle is outside the AABB and is skipped entirely. The broad phase is conservative — an obstacle can be inside the AABB without touching the footprint — but never misses a true collision.
+        Broad-phase AABB collision check. The car footprint (blue) is rotated at 35°; its axis-aligned bounding box (orange, dashed) is mapped to grid cell indices and only the highlighted cells are queried for obstacles. The purple obstacle falls inside the AABB and triggers an exact Shapely intersection check, but does not intersect the footprint, so the state is accepted as free. The grey obstacles are outside the AABB and are therefore skipped entirely. This filter is conservative, but it catches the vast majority of states considered without requiring more expensive tests.
     ],
 ) <fig:aabb_check>
 
@@ -215,10 +215,10 @@ The combined effect of these two optimisations is a #box[3.2$times$] end-to-end 
     caption: [Call counts (*above*) and exclusive CPU time (*below*) for key functions, comparing the unoptimised and optimised collision checker. Total runtime: 11.0 s (unoptimised) vs 3.4 s (optimised), a #box[3.2$times$] speedup. `propagate` is included as a control to show that primitive generation cost is largely unchanged between runs.]
 ) <fig:collision_opt>
 
-=== Line segment handling.
-The trailer's hitch bar cannot be represented as a box, so it is stored as raw endpoints rather than a Shapely geometry. Containment is checked by testing both endpoints against the boundary. Obstacle intersection uses Woo and Amanatides's fast voxel traversal algorithm algorithm @10.2312:egtp.19871000 an occupancy grid, stepping cell-by-cell along the segment and returning on the first occupied cell.
+=== Line segment handling
+The trailer's hitch bar connects the truck rear to the trailer's front axle. In this project, this is simplified to a line from the center of the rear axle of the truck to the trailers front axle. This cannot be represented as a box, so it is stored as raw endpoints rather than a Shapely geometry. Containment is checked by testing both endpoints against the boundary. Obstacle intersection uses Amanatides and Woo's fast voxel traversal algorithm @10.2312:egtp.19871000 against an occupancy grid, stepping cell-by-cell along the segment and returning on the first occupied cell.
 
-=== Path-level validation.
+=== Path-level validation
 During planning, entire primitive trajectories must be validated, not just individual states. A two-phase approach is used: first, the last state and every 4th intermediate state are checked using the approximate (cached, untranslated) footprints. Most invalid primitives are caught here. If that passes, and fine collision checks are enabled, the remaining states are checked with exact footprints.
 
 
@@ -255,7 +255,7 @@ function HYBRID_ASTAR(start, goal):
 ]
 
 
-#figure(astar_block, caption: "hybrid A* pseudocode")
+#figure(astar_block, caption: [Hybrid A\* pseudocode])
 
 === Primitive Generation
 At each node, the bot generates a set of motion primitives by sampling control inputs. For car-like and trailer vehicles, this means sampling steering angles $delta$ evenly between $-delta_max$ and $+delta_max$, combined with forward and reverse speed. For differential drives, different angular velocities $omega$ are instead sampled. Each pair is integrated over $n$ timesteps using an analytic arc trajectory formula #footnote[For derivation, see #ref(<arc_derivation>, supplement: [])] to avoid computational cost and error accumulation:
@@ -295,9 +295,13 @@ When a node falls within a euclidean distance of `terminal_radius` of the goal p
 
 This avoids the difficulty of landing exactly on the goal pose through discrete primitives, and is the mechanism by which the planner achieves precise heading alignment at the goal.
 
-The connection is not attempted on every node within the terminal radius. Since the trajectory must be validated for collisions, attempting it from every qualifying node is expensive and unlikely to pay off far from the goal where obstacles are more likely to block a direct path. Following @kurzer_path_2016[Section 6.1.2], a distance-proportional probability gate is applied: the attempt probability scales linearly from 0 at the edge of the terminal radius to 1 at the goal position itself.
+The connection is not attempted on every node within the terminal radius. Since the trajectory must be validated for collisions, attempting it from every qualifying node is expensive and unlikely to pay off far from the goal where obstacles are more likely to block a direct path. Following @kurzer_path_2016[Section 6.1.2], a distance-proportional probability gate is applied: the attempt probability scales linearly from 0 at the edge of the terminal radius to 1 at the goal position itself. The exact calculation  is:
 
-The attempted path is validated for collisions before being accepted. For the trailer, the trailer heading is simultaneously integrated along the RS path and the attempt is rejected if jackknifing occurs. As the planner is unable to directly control the trailer heading, it rejects attempts if the trailer heading at the goal is within a set tolerance.
+$ P = 1 - norm(bold(p) - bold(p)_g) / R_t $
+
+where $bold(p) = (x, y)$ is the position component of the current state, $bold(p)_g$ is the goal position, and $R_t$ is the terminal radius.
+
+The attempted path is validated for collisions before being accepted. For the trailer, the trailer heading is simultaneously integrated along the RS path and the attempt is rejected if jackknifing occurs. As the planner is unable to directly control the trailer heading, it rejects attempts if the trailer heading at the goal is outside a set tolerance.
 
 
 === Post-Processing
@@ -348,7 +352,7 @@ The planner works well across all four vehicle types. The trailer in particular 
 
     Both the differential drive and Ackermann kinematics can be simplified to the unicycle kinematic model @lav2006[Section 13.1.2.3]:
 
-    $ dot(x) &= nu dot cos(theta) \  dot(y) &= nu dot sin(theta)  \ dot(theta)  &= omega $
+    $ dot(x) &= nu dot cos(theta) \  dot(y) &= nu dot sin(theta)  \ dot(theta)  &= omega $ <unicycle>
 
     The differential drive model is directly equivalent, while Ackermann steering has a dependency between the velocity $nu$ and steering angle $delta$:
 
@@ -372,24 +376,30 @@ The planner works well across all four vehicle types. The trailer in particular 
 
     $
 
-    The radius of the circle traced by this arc can be found through the equation $R = L dot tan(delta)$ @lav2006[Section 13.1.2.1]. If we look back at @eq:ackermann_omega, this allows us to substitute $R = nu / omega$:
+    The radius of the circle traced by this arc can be found through the equation $R = L / tan(delta)$ @lav2006[Section 13.1.2.1]. from
+  @eq:ackermann_omega, $omega = nu dot tan(delta)/L$, so $R = L/tan(delta) = nu/omega$. Substituting $nu/omega$ for $R$:
 
     $
     vec(x(t) & = x_0 + R dot (sin(theta(t)) - sin(theta_0)) , y(t) & = y_0 - R dot (cos(theta(t)) - cos(theta_0)), delim: "[", gap: #1em)
     $
 
-    This can be extended to include the case of $omega approx 0 => R = v / 0$, where the arc approaches a straight line as $R -> infinity$. Intuitively, the kinematics of this case can be easily formulated:
+    This can be extended to include the case of $omega approx 0 => R = v / 0$, where the arc approaches a straight line as $R -> infinity$. As in this case the heading, and thus the components of the velocity remain constant, the kinematics of this case can be easily formulated from @unicycle:
     $
-      vec(x(t) & = x_0 + nu dot t dot cos(theta_0), y(t) & = y_0 + nu dot t dot sin(theta_0), theta(t) & = theta_0, delim: "[", gap: #1em)
+      vec(
+        x(t)        & = x_0 + dot(x) dot t = x_0 + nu dot t dot cos(theta_0), 
+        y(t)        & = y_0 + dot(y) dot t = y_0 + nu dot t dot sin(theta_0), 
+        theta(t)    & = theta_0 + omega dot t = theta_0, 
+      
+      delim: "[", gap: #1em)
     $
 
-    However, besides $theta(t)$, $x(t)$ and $y(t)$ must be formally derived via L'Hopital's rule:
+    This result can be verified formally via L'Hôpital's rule applied to the arc equations as $omega -> 0$:
     $
-      lim_(nu->0) (nu dot (sin(theta_0 + omega dot t) - sin(theta_0))) / omega = 0 / 0 = lim_(w->0) (nu dot cos(theta_0  + 0 dot t) dot t - 0) / 1 = v dot t dot cos(theta_0)
+      lim_(omega->0) (nu dot (sin(theta_0 + omega dot t) - sin(theta_0))) / omega = 0 / 0 = lim_(omega->0) (nu dot cos(theta_0  + 0 dot t) dot t - 0) / 1 = v dot t dot cos(theta_0)
     $
 
     $
-        lim_(nu->0) (nu dot (cos(theta_0 + omega dot t) - cos(theta_0))) / omega = 0 / 0 = lim_(nu->0) (nu dot -sin(theta_0 + 0 dot t) dot t - 0) / 1 = -v dot t dot sin(theta_0)
+        lim_(omega->0) (nu dot (cos(theta_0 + omega dot t) - cos(theta_0))) / omega = 0 / 0 = lim_(omega->0) (nu dot -sin(theta_0 + 0 dot t) dot t - 0) / 1 = -v dot t dot sin(theta_0)
     $
 
     which can be substituted back into the arc equations to get the straight line equations. Stationary ($nu = 0, abs(omega) > 0$) turns do not suffer from this instability, however this would require an ackermann car to have a steering angle of $90 degree$, which would cause $tan(delta) -> infinity$ (@eq:ackermann_omega).
