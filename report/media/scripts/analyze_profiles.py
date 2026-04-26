@@ -21,7 +21,9 @@ for _variant in ("Regular", "Bold", "Italic", "BoldItalic"):
 for _variant in ("Regular", "Italic"):
     font_manager.fontManager.addfont(str(_font_dir / f"NewCM08-{_variant}.otf"))
 matplotlib.rcParams["font.family"] = "NewComputerModern10"
-matplotlib.rcParams["font.size"] = 11
+matplotlib.rcParams["font.size"] = 14        # tick labels, ylabel, legend
+matplotlib.rcParams["axes.titlesize"] = 12   # per-axes titles (unused here)
+matplotlib.rcParams["figure.titlesize"] = 16 # suptitle
 
 import matplotlib.pyplot as plt
 import numpy as np

@@ -212,7 +212,7 @@ The combined effect of these two optimisations is a #box[3.98$times$] end-to-end
 
 #figure(
     image("media/photos/collision_opt_comparison.svg", width: 100%),
-    caption: [Call counts (*above*) and exclusive CPU time (*below*) for key functions, comparing the unoptimised and optimised collision checker. Total runtime: 81.5 s (unoptimised) vs 20.5 s (optimised), a #box[3.98$times$] speedup. `propagate` is included as a control to show that primitive generation cost is largely unchanged between runs.]
+    caption: [Call counts (*above*) and exclusive CPU time (*below*) for key , comparing the unoptimised and optimised collision checker. Total runtime: 81.5 s (unoptimised) vs 20.5 s (optimised), a #box[3.98$times$] speedup. `propagate` is included as a control to show that primitive generation cost is largely unchanged between runs.]
 ) <fig:collision_opt>
 
 === Line segment handling
@@ -258,6 +258,10 @@ function HYBRID_ASTAR(start, goal):
 #figure(astar_block, caption: [Hybrid A\* pseudocode])
 
 === Primitive Generation
+#figure(
+    image("media/photos/primitives_fig.svg", width: 100%),
+    caption: [Motion primitives generated from a single car state (heading 30°). Blue arcs are forward; orange are reverse. *Left:* all 10 primitives — five steering angles (−45°, −22.5°, 0°, 22.5°, 45°) × forward/reverse. *Right:* straight primitives (δ = 0) only, shown at the same scale to illustrate their short length relative to the car body — each arc extends only until its endpoint lands in a new grid cell.]
+)
 At each node, the bot generates a set of motion primitives by sampling control inputs. For car-like and trailer vehicles, this means sampling steering angles $delta$ evenly between $-delta_max$ and $+delta_max$, combined with forward and reverse speed. For differential drives, different angular velocities $omega$ are instead sampled. Each pair is integrated over $n$ timesteps using an analytic arc trajectory formula #footnote[For derivation, see #ref(<arc_derivation>, supplement: [])] to avoid computational cost and error accumulation:
 
 $
