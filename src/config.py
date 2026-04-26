@@ -9,7 +9,7 @@ import math
 # ── Grid / Environment ───────────────────────────────────────────────────
 NUM_ROWS, NUM_COLS  = 12, 12
 CELLS_TO_METERS     = 3                             # meters per grid cell
-OBSTACLE_COVERAGE   = 0.1                          # fraction of cells filled
+OBSTACLE_COVERAGE   = 0.1                           # fraction of cells filled
 
 # ── Display ──────────────────────────────────────────────────────────────
 VIRTUAL_SIZE        = (800, 800)                    # pixels

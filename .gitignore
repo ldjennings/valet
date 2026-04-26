@@ -8,8 +8,7 @@ scratch.typ
 recording.mp4
 .vscode/
 scratch/
-./*.prof
-profile*
+profile.prof
 screenshot_*
 *report.pdf
 

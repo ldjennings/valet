@@ -440,7 +440,7 @@ class TrailerBot(BotBase):
     """
 
     MAX_STEER       = math.radians(35)
-    TERMINAL_RADIUS = 6.0
+    TERMINAL_RADIUS = 15.0
     JACKKNIFE_LIMIT = math.pi / 2  # max allowed angle between truck and trailer headings
 
     def __init__(
