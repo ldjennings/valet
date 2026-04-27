@@ -1,31 +1,53 @@
-#import "@preview/retrofit:0.1.2": backrefs
+// #import "@preview/retrofit:0.1.2": backrefs
+
 
 // #show: backrefs.with(
 //   format: links => text(gray)[(Cited on p. #links.join(", ", last: " and "))],
 //   read: path => read(path),
 // )
 
-#let appendix(
+// Call once before the first #appendix() to emit the divider page and
+// reset heading numbering for the appendix section.
+#let begin-appendices(
   title: "Appendices",
-  title-size: 32pt,
+  numbering-style: "A",
+) = [
+  #page(
+    margin: (x: 2cm, y: 3cm),
+    header: none,
+    footer: none,
+  )[
+    #align(center + horizon)[
+      #line(length: 60%, stroke: 0.5pt)
+      #v(1.2em)
+      #text(size: 26pt, weight: "bold")[#title]
+      #v(1.2em)
+      #line(length: 60%, stroke: 0.5pt)
+    ]
+  ]
+  #counter(heading).update(0)
+]
+
+// Wrap each individual appendix section.
+#let appendix(
   numbering-style: "A",
   body,
 ) = [
-  #pagebreak()
-  #align(center + horizon)[
-    #text(size: title-size, weight: "bold")[#title]
-  ]
-  #pagebreak()
-
-  #counter(heading).update(0)
-  #set heading(numbering: (..nums) => "Appendix " + numbering(numbering-style, ..nums) + ":")
-  // #set heading(numbering: "A.", supplement: [])
-
+  #pagebreak(weak: true)
+  #set heading(
+    numbering: (..nums) => {
+      let n = nums.pos()
+      if n.len() == 1 { "Appendix " + numbering(numbering-style, ..nums) }
+      else { numbering(numbering-style + ".1", ..nums) }
+    },
+    supplement: [],
+  )
   #show heading.where(level: 1): it => {
     pagebreak(weak: true)
-    it
+    counter(heading).display(it.numbering)
+    [: ]
+    it.body
   }
-
   #body
 ]
 
