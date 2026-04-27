@@ -9,6 +9,8 @@
   date: "April 2026",
 )
 
+#outline()
+#pagebreak()
 
 == Introduction
 This project implements a motion planning simulator for four vehicle types: a holonomic point robot, a differential drive, an Ackermann car, and an Ackermann car towing a trailer. Each vehicle navigates a randomly generated obstacle field from a fixed start pose to a goal pose, eventually resulting in a kinematically correct path between them.
@@ -27,13 +29,20 @@ See @appendix:setup and @appendix:deps for initial installation instructions and
 
 == Development Approach
 
-Development was incremental: start with a working holonomic point robot (not required, but useful for isolating planner bugs), then add each vehicle type in order of complexity. Shapely was used for collision detection from the start as a correct-if-slow baseline, with optimisation deferred until the planner was working. Performance work was largely driven by profiling with `cProfile` and `snakeviz`.
+Two approaches shaped how the project was built:
 
-The code was also an experiment with modern Python's type system, primarily `typing.Protocol` and generics. These were used to keep vehicle types interchangeable without inheritance, inspired by Rust traits. This was interesting to practice, though probably not worth the overhead in the future.
+- *Incremental development:* Begin with a working holonomic point robot as a clean baseline for isolating planner bugs, then add each vehicle type in order of complexity. Optimisation was largely deferred until the planner was correct, and performance changes were driven by profiling data. This was a tradeoff between iteration speed and correctness.
+- *Experimentation:* The project served as a testbed for Python's type system (`typing.Protocol`, generics) to keep vehicle types interchangeable without inheritance — an approach inspired by Rust traits. 
 
-== AI/LLM Usage
+  The report similarly served as an exercise in Typst and technical writing. It is deliberately excessive, because I found it fun to make it so.
 
-This project was developed with assistance from LLM tools, primarily #link("https://claude.com/product/overview")[Claude]. Usage included acting as a partner for pair programming and assisting with research. Additionally, the the code for the figures in this report were primarily written by the LLM, with tuning and tweaks applied after.
+Shapely was used for collision detection from the start as a correct-if-slow reference implementation. Performance work was driven by `cProfile` and `snakeviz` profiling, with two targeted optimisations applied once bottlenecks were confirmed — covered in @fig:collision_opt.
+
+== AI/LLM Usage Disclosure
+
+This project was developed with assistance from LLM tools, primarily #link("https://claude.com/product/overview")[Claude]. Usage included acting as a partner for pair programming and assisting with research. 
+
+The figure-generation scripts (see `valet/report/media/scripts`) are an exception: these were almost entirely written by the LLM, with manual tuning applied after.
 
 #pagebreak()
 = Approach

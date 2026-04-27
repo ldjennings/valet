@@ -104,7 +104,7 @@
   #set heading(numbering: "1.1")
   #show link: underline
 
-  // running header: course left, author right, with a hairline below
+  
   #set page(
     header: context {
       if counter(page).get().first() > 0 [
