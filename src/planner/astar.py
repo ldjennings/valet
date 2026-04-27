@@ -11,6 +11,7 @@ terminates. The returned path is then smoothed and resampled by postprocessing.
 from dataclasses import dataclass, field
 import math
 import random
+import time
 from typing import Generic, cast, TypeAlias
 import heapq
 
@@ -238,6 +239,7 @@ def hybrid_astar(
     x0, y0 = start.position()
     xg, yg = goal.position()
     print(f"[hybrid_astar] searching from ({x0:.2f}, {y0:.2f}) to ({xg:.2f}, {yg:.2f})")
+    t0 = time.perf_counter()
 
     start_key = discretize(start, config)
 
@@ -290,7 +292,8 @@ def hybrid_astar(
                     and bot.at_goal(attempted_path[-1], goal):
 
                     print(f"[hybrid_astar] found path: {len(visited)} expansions, "
-                        f"{len(reconstruct_path(node, attempted_path))} states")
+                        f"{len(reconstruct_path(node, attempted_path))} states, "
+                        f"{time.perf_counter() - t0:.2f}s")
 
                     raw_path = smooth_path(reconstruct_path(node, attempted_path), bot, env)
                     return PlanResult(
@@ -319,6 +322,6 @@ def hybrid_astar(
                     trajectory  = prim.trajectory
                 ))
 
-    print(f"[hybrid_astar] no path found after {len(visited)} expansions")
+    print(f"[hybrid_astar] no path found after {len(visited)} expansions, {time.perf_counter() - t0:.2f}s")
 
     return PlanResult(path=None, visited_xy=visited_xy)

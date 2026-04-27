@@ -58,6 +58,17 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="RNG seed for reproducible obstacle layouts.",
     )
+    parser.add_argument(
+        "--no-render",
+        action="store_true",
+        help="Run the planner headless (no pygame window). Useful for benchmarking.",
+    )
+    parser.add_argument(
+        "-n", "--iterations",
+        type=int,
+        default=1,
+        help="Number of planning runs to execute (each with a fresh random seed unless -s is set).",
+    )
     return parser.parse_args()
 
 
@@ -98,14 +109,22 @@ def _make_scenario(bot_type: str, seed: int | None):
 
 def main() -> None:
     args = parse_args()
-
-    seed = args.seed if args.seed is not None else random.randint(0, 2**32 - 1)
-    print(f"Using seed: {seed}  (re-run with -s {seed} to reproduce)")
-    
-    bundle, environment = _make_scenario(args.bot_type, seed)
     config = HybridConfig(spacing=1, angular_spacing=math.pi / 3, max_iterations=45000, fine_collision=False)
 
-    Simulator(bundle, environment, config).run(args.manual, args.record)
+    for i in range(args.iterations):
+        seed = args.seed if args.seed is not None else random.randint(0, 2**32 - 1)
+        if args.iterations > 1:
+            print(f"\n[run {i + 1}/{args.iterations}] seed={seed}")
+        else:
+            print(f"Using seed: {seed}  (re-run with -s {seed} to reproduce)")
+
+        bundle, environment = _make_scenario(args.bot_type, seed)
+
+        if args.no_render:
+            from planner import hybrid_astar
+            hybrid_astar(environment, bundle.bot, bundle.start, bundle.goal, config)
+        else:
+            Simulator(bundle, environment, config).run(args.manual, args.record)
 
 
 if __name__ == "__main__":

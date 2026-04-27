@@ -11,33 +11,29 @@
 
 
 == Introduction
-This project implements a motion planning simulator for four vehicle types of increasing kinematic complexity: a holonomic point robot, a differential drive, an Ackermann car, and a car towing a trailer. Each vehicle navigates a randomly generated obstacle field from a fixed start pose to a goal pose.
+This project implements a motion planning simulator for four vehicle types: a holonomic point robot, a differential drive, an Ackermann car, and an Ackermann car towing a trailer. Each vehicle navigates a randomly generated obstacle field from a fixed start pose to a goal pose, eventually resulting in a kinematically correct path between them.
 
-The planner uses a python implementation of the Hybrid A\* search algorithm, a variant of A\* that searches over a continuous $(x, y, theta)$ state space while using a discretised grid for duplicate detection. The planner explores this grid by generating circular arc motion primitives, verifying that they do not collide with any obstacles. When within a set range of the goal, the planner occasionally attempts to plan a direct path while exploring nodes. If this path is verified to be collision free, the planner reconstructs a kinematically correct path by traversing its tree back to the start pose.
+The planner uses a python implementation of the Hybrid A\* search algorithm, exploring
+// , a variant of A\* that searches over a continuous $(x, y, theta)$ state space while using a discretised grid for duplicate detection. 
+the environment by generating circular arc motion primitives and verifying that they do not collide with any obstacles. When within a set range of the goal, the planner occasionally attempts to plan a direct path while exploring nodes. If this path is verified to be collision free, the planner reconstructs the overall path by tracing its steps back to the start pose. This path is then post-processed by probabilistic shortcutting and then resampled to a uniform velocity for smooth playback. 
 
-Collision detection is built on #link("https://shapely.readthedocs.io/en/stable/")[shapely] polygon geometry. Shapely is slow for repeated small queries, so a broad-phase occupancy-grid filter and a pre-rotated heading cache were implemented to keep query cost low.
-After successfully finding a raw path to the goal pose, it is post-processed by probabilistic shortcutting and then resampled to a uniform velocity for smooth playback.
+Collision detection is built on #link("https://shapely.readthedocs.io/en/stable/")[shapely] polygon geometry. Shapely is slow for repeated small queries, so a broad-phase occupancy-grid filter and a pre-rotated heading cache were implemented to keep query cost low. 
+
+See @appendix:setup and @appendix:deps for initial installation instructions and a description of notable external dependencies.
 #figure(
     image("media/photos/trailer_sim.png", width: 70%),
-    caption: [Trailer simulation mid-playback. The traced path follows the center of the rear axle for Ackermann and trailer vehicles, and the geometric center for differential drive and point robots. Blue dots mark the $(x, y)$ position of every state expanded during the planning phase.]
+    caption: [Trailer path animation mid-playback. The traced path follows the center of the rear axle for the Ackermann vehicles, and the geometric center for differential drive and point robots. Blue dots mark the $(x, y)$ position of every state expanded during the planning phase.]
 )
 
-
-== Dependencies and Setup
-
-Installation and usage instructions are summarised in @appendix:setup; notable external dependencies are listed in @appendix:deps.
-
-== Design Goals
+== Development Approach
 
 Development was incremental: start with a working holonomic point robot (not required, but useful for isolating planner bugs), then add each vehicle type in order of complexity. Shapely was used for collision detection from the start as a correct-if-slow baseline, with optimisation deferred until the planner was working. Performance work was largely driven by profiling with `cProfile` and `snakeviz`.
-#figure(
-    image("media/photos/icicle.svg", width: 115%),
-    caption: "Icicle plot rendering of profiled trailer simulation. Profiling shows time is split almost equally between primitive generation (propagate, 10.6 s) and collision checking (validate_path, 10.3 s), with is_valid_state accounting for 7.2 s of that collision budget."
-)
 
-The code was also an experiment with modern Python's type system — `typing.Protocol` and generics were used to keep vehicle types interchangeable without inheritance, inspired by Rust traits. Interesting in practice, though probably not worth the overhead in the future.
+The code was also an experiment with modern Python's type system, primarily `typing.Protocol` and generics. These were used to keep vehicle types interchangeable without inheritance, inspired by Rust traits. This was interesting to practice, though probably not worth the overhead in the future.
 
+== AI/LLM Usage
 
+This project was developed with assistance from LLM tools, primarily #link("https://claude.com/product/overview")[Claude]. Usage included acting as a partner for pair programming and assisting with research. Additionally, the the code for the figures in this report were primarily written by the LLM, with tuning and tweaks applied after.
 
 #pagebreak()
 = Approach
@@ -50,9 +46,9 @@ The code was also an experiment with modern Python's type system — `typing.Pro
     caption: [Obstacles generated given a 10% occupation requirement. Captured while driving the car in manual mode.]
 )
 
-The environment consists of a fixed-size 2D grid with randomly placed axis-aligned obstacles, a fixed start and goal at opposite corners, and a printable RNG seed for reproducibility. Obstacles are stored as both a NumPy boolean grid for fast broad-phase rejection and a Shapely `STRtree` for exact intersection tests.
+The environment consists of a fixed-size 2D grid with randomly placed axis-aligned obstacles, a fixed start and goal at opposite corners, and a printable RNG seed for reproducibility. Obstacles are stored as both a NumPy boolean grid for fast broad-phase rejection and a Shapely `STRtree` #footnote[A spatial index structure for fast nearest-neighbour queries, in the same vein as an Octree] for exact intersection tests.
 
-Obstacles are generated by randomly placing tetrominoes throughout the grid, until a set proportion of the grid is occupied by obstacles. The standard proportion is 10%. The vehicles (green rectangle) start in the top left, and attempts to navigate to the goal pose (yellow rectangle) in the bottom right. The starting and ending positions are always cleared.
+Obstacles are generated by randomly placing tetrominoes throughout the grid until a set proportion of the grid is occupied by obstacles. The standard proportion is 10%. The vehicles (green rectangle) start in the top left, and attempts to navigate to the goal pose (yellow rectangle) in the bottom right. The starting and ending positions are always cleared of obstacles prior to simulation start.
 
 #figure(
     grid(
@@ -76,27 +72,9 @@ The car's goal pose uses a non-standard offset from the grid edge to ensure the 
 // checks with a vehicle and obstacle region. Submit these diagrams individually, but also include
 // them in your report.
 
-The collision checker was designed to handle two geometry types: rotated rectangular footprints (for the robot body, truck, and trailer) and a line segment (the hitch bar connecting truck to trailer). Obstacles are axis-aligned grid cells, stored as both a numpy boolean array for fast grid lookups and a shapely `STRtree` of `box` polygons for exact intersection tests.
+The collision detector is required to handle two types of geometry: rotated rectangular footprints (the robot, car, truck, and trailer footprints) and line segments (the hitch bar connecting truck to trailer). Line segments can be cheaply checked via raycasting, while rectangular geometry is filtered through checks in order of increasing cost, exiting as soon as any check proves or disproves a vehicle's state will result in a collision. 
 
-#link("https://shapely.readthedocs.io/en/stable/")[Shapely] is designed for general topological geometry analysis and is not inherently optimised for repeated per-frame queries against a fixed obstacle set. Naively calling `intersects` on individually translated geometries at every state check proved too slow for the planner's inner loop. Three optimisations were applied to address this, and their combined effect is quantified in @fig:collision_opt.
-
-=== Heading cache <heading_cache>
-
-Rotating a Shapely geometry is expensive: internally, rotation calls `_affine_coords`, which walks every vertex of the polygon through a matrix multiply. To eliminate this per-query cost, each base shape is pre-rotated at 72 evenly-spaced headings (every $5°$) at construction time. Per-state footprint queries look up the nearest pre-rotated shape and record only the $(x, y)$ offset, deferring translation until an exact check is actually needed.
-
-#figure(
-    image("media/photos/heading_cache.svg", width: 100%),
-    caption: [
-        *Left:* three of the 72 pre-rotated car footprints stored in the heading cache (shown at 120$degree$ intervals for clarity; the full cache covers every 5$degree$). Arrows indicate the forward direction of each cached shape. *Right:* worst-case approximation error — the true footprint at 22.5$degree$ versus the nearest cached shape at 20$degree$, the maximum possible snap error being 2.5$degree$. Errors only occur when an obstacle intersects exclusively one discrepancy region (\~3.5% of vehicle area each); obstacles within the shared overlap are correctly detected by both shapes.
-    ],
-) <fig:heading_cache>
-
-As seen in @fig:collision_opt, this nearly eliminates `rotate` entirely (974,294 calls $->$ 3,622), and drives a #box[65$times$] reduction in `_affine_coords` calls (1,948,445 $->$ 29,917), representing the single largest source of time saved across both optimisations.
-
-=== State validation
-
-The state validator applies checks in order of increasing cost, exiting as soon as any check fails.
-
+The first two checks use the axis-aligned bounding box: checking to see if it lies within the bounds of the environment, then checking if any of the cells covered by the box contain obstacles: 
 #let validator = code-block()[
   ```
   function IS_VALID_STATE(geometries):
@@ -121,15 +99,46 @@ The state validator applies checks in order of increasing cost, exiting as soon 
 
 #figure(validator, caption: [Pseudocode describing state validation process.])
 
-For rectangular footprints, the translated axis-aligned bounding box (AABB) is checked against the environment boundary first. If it lies outside, the state is immediately rejected without touching any geometry. If it lies inside, the AABB is mapped to grid cell indices and the corresponding subgrid slice is checked for any occupied cell via `_has_possible_collision`. This eliminates the majority of states at negligible cost as the geometry is only translated and tested exactly against the `STRtree` (via `intersects_any`) if the broad phase reports a possible collision.
+The most accurate collison check uses shapely's built-in geometry predicates, matching the initial design. Obstacles are stored as shapely `STRtree` of `box` polygons, allowing for easy exact intersection tests with the rotated polygons representing the vehicles. 
+
+However, Shapely is designed for general topological geometry analysis and is not inherently optimised for repeated per-frame queries against a fixed obstacle set. Profiling with cProfile showed collision checking dominating overall runtime, therefore requiring the additional filter checks mentioned before, and further optimization via caching pre-rotated geometry. 
+
+Their combined effect reduced total runtime significantly and brought the proportion occupied by collision checking roughly in line with primitive generation. The breakdown of the overall simulator runtime can be seen in @fig:icicle, and quantified results of the optimization can be seen in @fig:collision_opt.
+
+#figure( 
+    image("media/photos/icicle.svg", width: 115%),
+    caption: [`snakeviz` Icicle plot of a profiled trailer simulation after optimisation. Time is now split roughly equally between primitive generation (propagate, 10.6 s) and collision checking (validate_path, 10.3 s), with is_valid_state accounting for 7.2 s of the collision budget.]
+) <fig:icicle>
+
+The subsections below describe each component in turn: the heading cache that eliminates per-query rotation cost, the broad-phase AABB filter that avoids most exact intersection tests, and the handling of the trailer's hitch bar as a special-case line segment.
+
+
+=== Heading cache <heading_cache>
+
+Rotating a Shapely geometry is expensive: internally, rotation calls `_affine_coords`, which walks every vertex of the polygon through a matrix multiplication. To eliminate this per-query cost, at runtime start the base shapes of each vehicle are pre-rotated to 72 evenly-spaced headings (every $5°$). Per-state footprint queries look up the nearest pre-rotated shape and record only the $(x, y)$ offset, deferring translation until an exact check is actually needed.
+
 #figure(
-    image("media/photos/aabb_check.svg", width: 80%),
+    image("media/photos/heading_cache.svg", width: 95%),
     caption: [
-        Broad-phase AABB collision check. The car footprint (blue) is rotated at 35°; its axis-aligned bounding box (orange, dashed) is mapped to grid cell indices and only the highlighted cells are queried for obstacles. The purple obstacle falls inside the AABB and triggers an exact Shapely intersection check, but does not intersect the footprint, so the state is accepted as free. The grey obstacles are outside the AABB and are therefore skipped entirely. This filter is conservative, but it catches the vast majority of states considered without requiring more expensive tests.
+        *Left:* three of the 72 pre-rotated car footprints stored in the heading cache (shown at 120$degree$ intervals for clarity; the full cache covers every 5$degree$). Arrows indicate the forward direction of each cached shape. *Right:* an example of the worst-case approximation error: the true footprint at 22.5$degree$ versus the nearest cached shape at 20$degree$, the maximum possible snap error being #box[2.5$degree$]. Errors only occur when an obstacle intersects exclusively one discrepancy region (\~3.5% of vehicle area each); obstacles within the shared overlap are correctly detected by both shapes.
+    ],
+) <fig:heading_cache>
+
+As seen in @fig:collision_opt, this nearly eliminates `rotate` entirely (974,294 calls $->$ 3,622), and drives a #box[65$times$] reduction in `_affine_coords` calls (1,948,445 $->$ 29,917), representing the single largest source of time saved across both optimisations.
+
+=== Broad-phase AABB filter
+
+For rectangular footprints, the translated axis-aligned bounding box (AABB) is simple and cheap to work with. The bounding boxes of the pre-rotated shapes are cached alongside them, so translating to any given state is just an offset addition. No Shapely calls are required.
+
+The bounding box is checked against the environment boundary first: if any part lies outside, the state is immediately rejected without touching any geometry. Otherwise, the AABB is mapped to obstacle grid cell indices and the covered slice is checked for any occupied cell via `_has_possible_collision`. This filter eliminates the majority of exact checks at negligible cost; the full shapely intersection check (`intersects_any`) is only invodked when this phase reports a possible collision.
+#figure(
+    image("media/photos/aabb_check.svg", width: 100%),
+    caption: [
+        Broad-phase AABB check for a car footprint (blue) at 35$degree$. The purple obstacle falls inside the AABB but not the footprint: a false positive the exact check resolves. Grey obstacles are skipped entirely.
     ],
 ) <fig:aabb_check>
 
-The effect is visible in @fig:collision_opt: `_has_possible_collision` appears only in the optimised profile (935,415 calls), while `intersects_any` — the expensive Shapely intersection — drops #box[41$times$] from 938,273 to 23,006 calls. Crucially, `is_valid_state` is called roughly the same number of times in both profiles (487,071 vs 485,689), confirming that the AABB filter does not reduce collision accuracy, instead avoiding exact checks on states that are clearly free.
+The effect is visible in @fig:collision_opt: `_has_possible_collision` appears only in the optimised profile (935,415 calls), while `intersects_any` — the expensive Shapely intersection — drops #box[41$times$] from 938,273 to 23,006 calls. Crucially, `is_valid_state` is called roughly the same number of times in both profiles (487,071 vs 485,689), confirming that the AABB filter does not reduce collision accuracy.
 
 The combined effect of these two optimisations is a #box[3.98$times$] end-to-end speedup (81.5 s $->$ 20.5 s). For reference, `propagate` — which handles motion primitive generation and is unaffected by the collision optimisations — shows virtually identical call counts and cost in both profiles, confirming the speedup is attributable entirely to the collision checker.
 
@@ -139,10 +148,19 @@ The combined effect of these two optimisations is a #box[3.98$times$] end-to-end
 ) <fig:collision_opt>
 
 === Line segment handling
-The trailer's hitch bar connects the truck rear to the trailer's front axle. In this project, this is simplified to a line from the center of the rear axle of the truck to the trailers front axle. This cannot be represented as a box, so it is stored as raw endpoints rather than a Shapely geometry. Containment is checked by testing both endpoints against the boundary. Obstacle intersection uses Amanatides and Woo's fast voxel traversal algorithm @10.2312:egtp.19871000 against an occupancy grid, stepping cell-by-cell along the segment and returning on the first occupied cell.
+The trailer's hitch bar connects the truck rear to the trailer's front axle. In this project, this is simplified to a line from the center of the rear axle of the truck to the trailer's front axle. 
+
+This line is stored as raw endpoints rather than a Shapely geometry. Containment within the environment is checked by testing both endpoints against the boundary. Obstacle intersection uses Amanatides and Woo's fast voxel traversal algorithm @10.2312:egtp.19871000 against an occupancy grid, stepping cell-by-cell along the segment and returning on the first occupied cell.
 
 === Path-level validation
-During planning, entire primitive trajectories must be validated, not just individual states. A two-phase approach is used: first, the last state and every 4th intermediate state are checked using the approximate (cached, untranslated) footprints. Most invalid primitives are caught here. If that passes, and fine collision checks are enabled, the remaining states are checked with exact footprints.
+During planning, entire primitive trajectories must be validated, not just individual states. Checking every state exactly would be expensive, but the fine timestep of the simulation justifies skipping most of them: at 5 m/s and 30 fps each step advances the car only 0.167 m — far less than the 5.2 m car length — so consecutive footprints overlap almost entirely (@fig:path_overlap), and a collision missed at an intermediate state is almost certain to also occur at next checked one.
+
+#figure(
+    image("media/photos/path_overlap.svg", width: 90%),
+    caption: [Car footprints along a 20-step arc. Faint blue shapes are unchecked states; orange outlines mark every 4th state that is actually checked. The 0.67 m spacing between checks is small relative to the 5.2 m car body, so the footprints at checked states subsume those in between.]
+) <fig:path_overlap>
+
+A two-phase approach is used. The first pass checks the last state and every 4th intermediate state using the approximate cached footprints — no translation required, just a lookup. This catches virtually all invalid primitives at low cost. If it passes, an optional second phase checks the remaining states with exact translated footprints. This is skipped for most planning iterations and reserved for the final accepted path, where correctness matters more than speed.
 
 
 
@@ -152,11 +170,18 @@ During planning, entire primitive trajectories must be validated, not just indiv
 == Planner Implementation
 === Hybrid A\*
 
-The planner uses Hybrid A\*, a variant of A\* that operates over a continuous state space rather than a discrete grid. States are represented as continuous $(x, y, theta)$ (and $phi$ for the trailer), but duplicate detection uses a discretised grid: XY position is rounded to the nearest spacing multiple, and headings are floor-divided into fixed angular bins of `angular_spacing` size. A node is only expanded once per discrete cell, preventing the search from cycling while still allowing the robot to reach any continuous pose within a cell.
+The planner uses Hybrid A\*, a variant of A\* that operates over a continuous state space rather than a discrete grid. States are represented as continuous $(x, y, theta)$ (plus $phi$ with a trailer); adjacent nodes are generated by sampling a set of control inputs and integrating the vehicle's kinematics forward from the current state, producing one candidate trajectory per input. To prevent the search from cycling through very similar states, duplicate detecion is achieved via a discretized grid. XY are positions rounded to the nearest spacing multiple, and headings are floor-divided into angular bins of `angular_spacing` size. Underneath, the node stil contains the continuous state.
 
-Neighboring cells are generated from a node by sampling a subset of the possible control inputs, and then simulating the kinematics resulting from them.
+#figure(
+    image("media/photos/grid_spacing.svg", width: 90%),
+    caption: [The 1 m $times$ 1 m duplicate-detection grid overlaid on the car footprint.]
+) <fig:grid_spacing>
 
-The heuristic used is the Reeds-Shepp path length from the current state to the goal, ignoring obstacles. This is admissible and generally tighter than Euclidean distance for non-holonomic robots, as it accounts for turning radius constraints that Euclidean distance ignores @kurzer_path_2016[Section 8.1] @dolgov[Page 2].
+To ensure the path reaches the exact goal state, a last shot connection is regularly attempted once within range of the goal. While not strictly required, this project applies postprocessing to the final path for smoothness in curvature and velocity.
+
+The heuristic used is the Reeds-Shepp path length @reedsshepp from the current state to the goal, ignoring obstacles. This is admissible and generally tighter than Euclidean distance for non-holonomic robots, as it accounts for turning radius constraints that Euclidean distance ignores @kurzer_path_2016[Section 8.1] @dolgov[Page 2].
+
+
 
 #let astar_block = code-block()[
 ```
@@ -180,28 +205,31 @@ function HYBRID_ASTAR(start, goal):
 
 #figure(astar_block, caption: [Hybrid A\* pseudocode])
 
-=== Primitive Generation
+The following subsections detail each of these three routines in turn.
+
+=== Primitive Propagation
 #figure(
     image("media/photos/primitives_fig.svg", width: 100%),
     caption: [Motion primitives generated from a single car state (heading 30 $degree$). Blue arcs are forward; orange are reverse. *Left:* all 10 primitives — five steering angles ( -45 $degree$, -22.5 $degree$, 0 $degree$, 22.5 $degree$, 45 $degree$ ) $times$ forward/reverse. *Right:* straight primitives ($delta$ = 0) only, shown at the same scale to illustrate their short length relative to the car body — each arc extends only until its endpoint lands in a new grid cell.]
 )
-At each node, the bot generates a set of motion primitives by sampling control inputs. For car-like and trailer vehicles, this means sampling steering angles $delta$ evenly between $-delta_max$ and $+delta_max$, combined with forward and reverse speed. For differential drives, different angular velocities $omega$ are instead sampled. Each pair is integrated over $n$ timesteps using an analytic arc trajectory formula #footnote[For derivation, see #ref(<arc_derivation>, supplement: [])] to avoid computational cost and error accumulation:
+At each node, the vehicle generates a set of motion primitives by propagating sampled control inputs. For car-like and trailer vehicles, this means sampling steering angles $delta$ evenly between $-delta_max$ and $+delta_max$, combined with forward and reverse speed. For differential drives, different angular velocities $omega$ are sampled instead. 
+
+Each combination is integrated forward for $n$ timesteps (chosen so the primitive exits its current grid cell — see below). Since $nu$ and $omega$ are constant over each primitive, each trajectory is a circular arc, which allows a closed-form solution rather than requiring iterative integration.#footnote[For derivation, see #ref(<arc_derivation>, supplement: [])]:
 
 $
-theta (i) &= theta_0 + omega dot i dot d t \
+ 
 x(i) &= x_0 + R dot (sin(theta (i)) - sin(theta_0)) \
-y(i) &= y_0 - R dot (cos(theta (i)) - cos(theta_0))
+y(i) &= y_0 - R dot (cos(theta (i)) - cos(theta_0)) \
+theta (i) &= theta_0 + omega dot i dot d t
 $ <eq:arc_trajectory_formula>
 
-where $R = nu / omega$, and $i$ is the $i$-th timestep of $d t$ during the turn. Although the Ackermann and differential drive models differ in how $omega$ is produced, both can be reduced to the same unicycle model @lav2006[Section 13.1.2.3]. Therefore, both kinds of vehicles may be modeled using the above formula.
+where $R = nu / omega$ and $i$ is the $i$-th timestep. Each primitive therefore traces a circular arc. Although Ackermann and differential drive vehicles differ in how $omega$ is derived from their controls, both reduce to the same unicycle model @lav2006[Section 13.1.2.3], so the same formula applies to both.
 
-The step count $n$  is calculated to satisfy two constraints:
+The step count $n$ is chosen as $max(n_nu, n_omega)$, where each term is the minimum number of steps needed to guarantee the primitive exits its current cell or heading bin:                                                                                                                                                                                                
+$ n_nu = ceil(frac("spacing", |nu| dot d t)), quad n_omega = ceil(frac("angular_spacing", |omega| dot d t)) $                                                                                                                                                                                                                                                                    
+This ensures every primitive lands in a distinct $(x,y)$ cell and heading bin.
 
-$ n_nu >= frac("spacing", |nu| dot  d t), quad n_omega >= frac("angular_spacing", |omega| dot d t) $
-
-The final value of $n$ is simply $max(n_nu, space n_omega)$. Satisfying these constraints guarantees every primitive lands in different $(x,y)$ cell and heading bin compared to the initial cell.
-
-The cost of each primitive (and therefore edge in the A\* graph) is the arc length of the primitive plus a weighted heading change, with an additive penalty for reversals to discourage the planner from exploring backwards.
+The cost of each primitive (and therefore edge in the A\* graph) is the arc length of the primitive plus a weighted heading change, and an additive penalty for reversals to discourage the planner from exploring backwards.
 
 
 Two vehicle-specific exceptions apply:
@@ -218,17 +246,15 @@ Two vehicle-specific exceptions apply:
 
 === Last-Shot Connection
 
-When a node falls within a euclidean distance of `terminal_radius` of the goal pose, a closed-form trajectory ignorant of obstacles is attempted directly to the goal rather than continuing to expand primitives. For car and trailer bots this is a Reeds-Shepp path @reedsshepp; for the differential drive bot it is a rotate-drive-rotate sequence.
+When a node falls within a Euclidean distance of `terminal_radius` of the goal pose, an obstacle-free closed-form trajectory is attempted directly to the goal rather than continuing to expand primitives. For car and trailer vehicles this is a Reeds-Shepp path @reedsshepp; for the differential drive it is a rotate-drive-rotate sequence. This avoids the difficulty of landing exactly on the goal pose through discrete primitives, and is the mechanism by which the planner achieves precise heading alignment at the goal.
 
-This avoids the difficulty of landing exactly on the goal pose through discrete primitives, and is the mechanism by which the planner achieves precise heading alignment at the goal.
-
-The connection is not attempted on every node within the terminal radius. Since the trajectory must be validated for collisions, attempting it from every qualifying node is expensive and unlikely to pay off far from the goal where obstacles are more likely to block a direct path. Following @kurzer_path_2016[Section 6.1.2], a distance-proportional probability gate is applied: the attempt probability scales linearly from 0 at the edge of the terminal radius to 1 at the goal position itself. The exact calculation  is:
+The connection is not attempted on every node within the terminal radius — since each attempt requires a full collision check, it is only worth trying close to the goal where a direct path is more likely to be clear. Following @kurzer_path_2016[Section 6.1.2], a distance-proportional probability gate is applied, scaling linearly from 0 at the edge of the terminal radius to 1 at the goal:
 
 $ P = 1 - norm(bold(p) - bold(p)_g) / R_t $
 
-where $bold(p) = (x, y)$ is the position component of the current state, $bold(p)_g$ is the goal position, and $R_t$ is the terminal radius.
+where $bold(p) = (x, y)$ is the current position, $bold(p)_g$ is the goal position, and $R_t$ is the terminal radius.
 
-The attempted path is validated for collisions before being accepted. For the trailer, the trailer heading is simultaneously integrated along the RS path and the attempt is rejected if jackknifing occurs. As the planner is unable to directly control the trailer heading, it rejects attempts if the trailer heading at the goal is outside a set tolerance.
+For the trailer vehicle, the trailer heading is simultaneously integrated along the RS path. The connection is rejected if the trailer heading at the goal falls outside a set tolerance, or if jackknifing occurs at any point along it.
 
 
 === Post-Processing
@@ -263,21 +289,53 @@ The raw path from the search is passed through two steps before playback:
     caption: [Navigation results for each vehicle type: point robot (*top left*), differential drive (*top right*), Ackermann car (*bottom left*), trailer (*bottom right*).]
 )
 
-The planner works well across all four vehicle types. The trailer in particular produces some satisfying paths — watching it navigate tight spaces while keeping the trailer heading under control is a good demonstration that the coupled kinematics are being handled correctly. Performance ended up in a reasonable place after profiling, making iteration much faster than it was early on. The codebase also ended up in a good state structurally; having a clean interface between vehicle types made it easy to experiment with planner parameters and add features without things breaking unexpectedly.
+The planner works well across all four vehicle types. The differential drive and car typically find paths within a couple of seconds. The trailer is slower due to its higher-dimensional state space and additional per-step calculations, and its success rate is not 100%: some obstacle layouts produce no reachable path given the jackknife constraints. Failed runs do exhaust the iteration budget quickly though, finishing in around 10 seconds, so the cost of a miss is low. When it does succeed, the trailer produces some satisfying paths: watching it navigate tight spaces and control the heading while reversing is a good demonstration that the coupled kinematics are being handled correctly.
 
-== Areas for Improvement
+#let bench = csv("data/benchmark.csv", row-type: dictionary)
 
-- *Obstacle-aware heuristic.* The Reeds-Shepp heuristic ignores obstacles, which can cause the planner to underestimate costs in cluttered environments. Augmenting it with a precomputed 2D Dijkstra cost-to-go map from the goal would give tighter estimates and likely reduce node expansions. Other implementations @dolgov @kurzer_path_2016 have tried this approach, either individually or combined with obstacle-free distance metrics.
+#let rows-for(bot) = bench.filter(r => r.bot_type == bot)
+#let successes(bot) = rows-for(bot).filter(r => r.success == "1")
+#let avg(vals) = vals.fold(0.0, (a, b) => a + b) / vals.len()
 
-- *State representation boundary.* Throughout the planner, fully typed state objects are used rather than raw float arrays or tuples. This made the logic clean and easy to reason about, but there is a performance cost. NumPy operations on raw arrays would be substantially faster than constructing and passing around dataclass instances in the planner's inner loop. This was a conscious tradeoff in favour of correctness and clarity over speed.
+#let fmt-row(label, dims, bot) = {
+  let s = successes(bot)
+  let n = rows-for(bot).len()
+  let rate = str(s.len()) + "/" + str(n)
+  let t = if s.len() > 0 { str(calc.round(avg(s.map(r => float(r.time_s))), digits: 1)) + " s" } else { "—" }
+  let exp = if s.len() > 0 { str(int(avg(s.map(r => float(r.expansions))))) } else { "—" }
+  (label, dims, rate, t, exp)
+}
 
-- *Dataclass performance.* Switching from standard Python dataclasses to a library like `msgspec` could reduce the overhead of creating large numbers of short-lived state objects during search. Learning how to have these interact with NumPy would be interesting.
+#figure(
+  table(
+    columns: 5,
+    stroke: none,
+    inset: (x: 0.6em, y: 0.45em),
+    table.header(
+      [*Vehicle*], [*State dims*], [*Success*], [*Avg time*], [*Avg expansions*]
+    ),
+    table.hline(),
+    ..fmt-row([Differential drive], [$x, y, theta$], "diff"),
+    ..fmt-row([Ackermann car],       [$x, y, theta$], "car"),
+    ..fmt-row([Trailer],             [$x, y, theta, phi$], "trailer"),
+  ),
+  caption: [Planning performance over 10 runs per vehicle type at 10% obstacle density. Success rate, average planning time, and average node expansions are computed over successful runs only. Planner settings: `spacing=1 m`, `angular_spacing=`$pi\/3$, `max_iterations=45000`, `fine_collision=False`.]
+)
 
-- *Full SAT-based collision.* Shapely is still used for the narrow-phase intersection checks. Replacing it entirely with raw NumPy checks using the Separating Axis Theorem would remove the last external geometry dependency and likely be faster. The current version is good enough, but it's a loose end. Other approaches to collision detection like circular bounding boxes could be explored as well.
 
-- *Planner visualisation.* It would be nice to watch Hybrid A\* progress in real time: drawing expanded nodes, edges, the open set, and the current best path as the search runs. The current sim only shows the final result. This wasn't a priority, but it would make debugging and tuning much more intuitive.
+The codebase also ended up in a good state structurally; having a clean interface between vehicle types made it easy to experiment with planner parameters and add features without things breaking unexpectedly.
 
-- *Full dynamics and controls simulation.* The current simulator only considers kinematics, with perfect awareness of its surroundings. A more realistic setup could add a simple tracking controller and model dynamics from actuators, or play with sensors and requiring the robot to explore before finding its way.
+// == Areas for Improvement
+
+// - *Obstacle-aware heuristic.* Augmenting the Reeds-Shepp heuristic with a precomputed Dijkstra cost-to-go map would give tighter estimates and reduce node expansions in cluttered environments @dolgov @kurzer_path_2016.
+
+// - *Inner-loop performance.* Typed dataclass state objects keep the logic readable but carry overhead in the planner's hot path. Switching to raw NumPy arrays (or a zero-copy library like `msgspec`) would speed up both state construction and heuristic computation.
+
+// - *Pure-NumPy collision.* Shapely is still used for narrow-phase checks. Replacing it with SAT-based NumPy intersection tests would remove the external geometry dependency and likely be faster.
+
+// - *Planner visualisation.* Real-time rendering of expanded nodes and the open set would make tuning and debugging much more intuitive; the current sim only shows the final path.
+
+// - *Dynamics and sensing.* Adding a tracking controller, actuator dynamics, or a sensor model would make the simulation more realistic and open up exploration of sensor-based planning.
 
 #pagebreak()
 
@@ -336,7 +394,7 @@ The planner works well across all four vehicle types. The trailer in particular 
 
     - *#link("https://www.pygame.org/")[Pygame]* — provides the real-time 2-D rendering window, keyboard event handling for manual drive mode, and the simulation loop.
 
-    - *#link("https://shapely.readthedocs.io/en/stable/")[Shapely]* — computational geometry library used to represent robot footprints as polygons and query them against obstacle geometry via an STRtree #footnote[A spatial index structure for fast nearest-neighbour queries, in the same vein as an Octree] spatial index.
+    - *#link("https://shapely.readthedocs.io/en/stable/")[Shapely]* — computational geometry library used to represent robot footprints as polygons and query them against obstacle geometry via an STRtree spatial index.
 
     - *#link("https://imageio.readthedocs.io/")[imageio] / imageio-ffmpeg* — used together to encode simulation recordings to MP4 when the `--record` flag is passed; imageio-ffmpeg supplies the FFmpeg backend.
 
